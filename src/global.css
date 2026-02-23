@@ -304,6 +304,64 @@ body {
   --button-hover-color: #fff !important;
 }
 
+/* Feedback/refine modal overlay */
+.feedback-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.feedback-modal {
+  min-width: 300px;
+  max-width: 420px;
+  width: 90%;
+  padding: 20px !important;
+}
+
+.feedback-prompt {
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary-color, #1a1a1a);
+}
+
+.feedback-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+  background: var(--bg-color, #fff);
+  color: var(--text-color, #1a1a1a);
+  box-sizing: border-box;
+}
+
+.feedback-textarea:focus {
+  border-color: var(--color-primary, #6965db);
+}
+
+.feedback-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.feedback-actions .standalone {
+  padding: 7px 14px !important;
+  width: auto !important;
+  height: auto !important;
+  font-size: 0.875rem;
+}
+
 .loading {
   padding: 1rem;
   color: var(--text-muted);

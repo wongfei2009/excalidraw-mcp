@@ -124,6 +124,12 @@ const ExpandIcon = () => (
   </svg>
 );
 
+const SparkleIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 1l1.5 5.5L15 8l-5.5 1.5L8 15l-1.5-5.5L1 8l5.5-1.5z" />
+  </svg>
+);
+
 const ExternalLinkIcon = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 8.667V12.667C12 13.035 11.702 13.333 11.333 13.333H3.333C2.965 13.333 2.667 13.035 2.667 12.667V4.667C2.667 4.298 2.965 4 3.333 4H7.333" />
@@ -258,6 +264,85 @@ function ShareButton({
                 onClick={() => setState("idle")}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function RefineButton({ onSend }: { onSend: (text: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [text, setText] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleOpen = () => {
+    setOpen(true);
+    setText("");
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const handleSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    try {
+      await onSend(trimmed);
+      setOpen(false);
+      setText("");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKeyDown = (e: { key: string; shiftKey: boolean; preventDefault(): void }) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        className="app-button"
+        style={{ display: "flex", alignItems: "center", gap: 5, width: "auto", padding: "0 10px" }}
+        title="Ask AI to refine the diagram"
+        onClick={handleOpen}
+      >
+        <SparkleIcon />
+        <span style={{ fontSize: "0.75rem", fontWeight: 400 }}>Refine</span>
+      </button>
+
+      {open && (
+        <div className="excalidraw feedback-overlay" onClick={() => !sending && setOpen(false)}>
+          <div className="Island feedback-modal" onClick={(e) => e.stopPropagation()}>
+            <p className="feedback-prompt">Ask AI to refine the diagram:</p>
+            <textarea
+              ref={textareaRef}
+              className="feedback-textarea"
+              placeholder="e.g. Add a database node, use colors, simplify the layout…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={3}
+              disabled={sending}
+            />
+            <div className="feedback-actions">
+              <button className="standalone" onClick={() => setOpen(false)} disabled={sending}>
+                Cancel
+              </button>
+              <button
+                className="standalone export-modal-confirm"
+                onClick={handleSend}
+                disabled={!text.trim() || sending}
+              >
+                {sending ? "Sending…" : "Send ↵"}
               </button>
             </div>
           </div>
@@ -769,6 +854,35 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     return () => document.removeEventListener("keydown", handler);
   }, [displayMode, toggleFullscreen]);
 
+  const handleFeedback = useCallback(async (feedbackText: string) => {
+    if (!appRef.current) return;
+    const imageContent: any[] = [];
+    try {
+      if (elementsRef.current.length > 0) {
+        const blob = await exportToBlob({
+          elements: elementsRef.current,
+          appState: { viewBackgroundColor: "#ffffff", exportBackground: true } as any,
+          files: {},
+          mimeType: "image/png",
+          maxWidthOrHeight: 512,
+        });
+        const buf = await blob.arrayBuffer();
+        const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+        imageContent.push({ type: "image", data: base64, mimeType: "image/png" });
+      }
+    } catch (err) {
+      fsLog(`feedback PNG capture failed: ${err}`);
+    }
+    try {
+      await (appRef.current as any).sendMessage({
+        role: "user",
+        content: [...imageContent, { type: "text", text: feedbackText }],
+      });
+    } catch (err) {
+      fsLog(`sendMessage failed: ${err}`);
+    }
+  }, []);
+
   // Preload ALL Excalidraw fonts on first mount (inline mode) so they're
   // cached before fullscreen. Without this, Excalidraw's component init
   // downloads Assistant fonts, triggering a font recalc that corrupts
@@ -905,6 +1019,7 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     <main className={`main${displayMode === "fullscreen" ? " fullscreen" : ""}`} style={displayMode === "fullscreen" && containerHeight ? { height: containerHeight } : undefined}>
       {displayMode === "inline" && (
         <div className="toolbar">
+          <RefineButton onSend={handleFeedback} />
           <ShareButton
             onExport={async () => {
               await shareToExcalidraw({ elements, appState: {}, files: {} }, app);

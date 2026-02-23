@@ -85,6 +85,11 @@ export function createMockApp(): MockAppControls {
     async updateModelContext(opts: any) {
       console.log("[mock] updateModelContext", opts);
     },
+
+    async sendMessage(params: any) {
+      const types = (params.content as any[]).map((c: any) => c.type).join(", ");
+      console.log(`[mock] sendMessage role=${params.role} content=[${types}]`);
+    },
   } as unknown as App;
 
   return {
