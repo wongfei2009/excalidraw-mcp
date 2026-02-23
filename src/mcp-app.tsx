@@ -342,7 +342,7 @@ function RefineButton({ onSend }: { onSend: (text: string) => Promise<void> }) {
                 onClick={handleSend}
                 disabled={!text.trim() || sending}
               >
-                {sending ? "Sending…" : "Send ↵"}
+                {sending ? "Preparing…" : "Send ↵"}
               </button>
             </div>
           </div>
@@ -856,7 +856,7 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
 
   const handleFeedback = useCallback(async (feedbackText: string) => {
     if (!appRef.current) return;
-    const imageContent: any[] = [];
+    // Capture PNG → updateModelContext (puts diagram in model context silently)
     try {
       if (elementsRef.current.length > 0) {
         const blob = await exportToBlob({
@@ -868,15 +868,18 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
         });
         const buf = await blob.arrayBuffer();
         const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-        imageContent.push({ type: "image", data: base64, mimeType: "image/png" });
+        await appRef.current.updateModelContext({
+          content: [{ type: "image", data: base64, mimeType: "image/png" }],
+        });
       }
     } catch (err) {
       fsLog(`feedback PNG capture failed: ${err}`);
     }
+    // Pre-fill input box with user text (Claude Desktop requires user to press Enter)
     try {
       await (appRef.current as any).sendMessage({
         role: "user",
-        content: [...imageContent, { type: "text", text: feedbackText }],
+        content: [{ type: "text", text: feedbackText }],
       });
     } catch (err) {
       fsLog(`sendMessage failed: ${err}`);
