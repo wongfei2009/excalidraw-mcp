@@ -3,6 +3,7 @@ import type { App } from "@modelcontextprotocol/ext-apps";
 import {
   Excalidraw,
   exportToSvg,
+  exportToBlob,
   convertToExcalidrawElements,
   restore,
   CaptureUpdateAction,
@@ -156,18 +157,36 @@ async function shareToExcalidraw(data: {elements: any[], appState: any, files: a
   }
 }
 
+async function downloadAsPng(elements: any[], appState: any, files: any) {
+  const blob = await exportToBlob({
+    elements,
+    appState: { viewBackgroundColor: "#ffffff", exportBackground: true, ...appState },
+    files: files ?? {},
+    mimeType: "image/png",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "excalidraw.png";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function ShareButton({
   onExport,
   onCopyJson,
   onCopySvg,
+  onDownloadPng,
 }: {
   onExport: () => Promise<void>;
   onCopyJson: () => Promise<void>;
   onCopySvg: () => Promise<void>;
+  onDownloadPng: () => Promise<void>;
 }) {
   const [state, setState] = useState<"idle" | "confirm" | "uploading">("idle");
   const [copyJsonState, setCopyJsonState] = useState<"idle" | "copied">("idle");
   const [copySvgState, setCopySvgState] = useState<"idle" | "copied">("idle");
+  const [downloadPngState, setDownloadPngState] = useState<"idle" | "downloading">("idle");
 
   const handleExport = async () => {
     setState("uploading");
@@ -188,6 +207,15 @@ function ShareButton({
     await onCopySvg();
     setCopySvgState("copied");
     setTimeout(() => setCopySvgState("idle"), 2000);
+  };
+
+  const handleDownloadPng = async () => {
+    setDownloadPngState("downloading");
+    try {
+      await onDownloadPng();
+    } finally {
+      setDownloadPngState("idle");
+    }
   };
 
   return (
@@ -220,6 +248,9 @@ function ShareButton({
               </button>
               <button className="standalone" onClick={handleCopySvg}>
                 {copySvgState === "idle" ? "Copy SVG to Clipboard (visual diagram)" : "✓ SVG Copied!"}
+              </button>
+              <button className="standalone" onClick={handleDownloadPng} disabled={downloadPngState === "downloading"}>
+                {downloadPngState === "idle" ? "Download as PNG" : "Downloading…"}
               </button>
               <button
                 className="standalone"
@@ -898,6 +929,13 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
                 fsLog(`Copy SVG failed: ${err}`);
               }
             }}
+            onDownloadPng={async () => {
+              try {
+                await downloadAsPng(elements, {}, {});
+              } catch (err) {
+                fsLog(`Download PNG failed: ${err}`);
+              }
+            }}
           />
 
           <button
@@ -968,6 +1006,17 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
                     await navigator.clipboard.writeText(svg.outerHTML);
                   } catch (err) {
                     fsLog(`Copy SVG failed: ${err}`);
+                  }
+                }}
+                onDownloadPng={async () => {
+                  if (!excalidrawApi) return;
+                  try {
+                    const elements = excalidrawApi.getSceneElements();
+                    const appState = excalidrawApi.getAppState();
+                    const files = excalidrawApi.getFiles();
+                    await downloadAsPng(elements, appState, files);
+                  } catch (err) {
+                    fsLog(`Download PNG failed: ${err}`);
                   }
                 }}
               />
