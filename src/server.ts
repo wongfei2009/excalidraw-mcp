@@ -407,11 +407,88 @@ export function registerTools(server: McpServer, distDir: string, store: Checkpo
   server.registerTool(
     "read_me",
     {
-      description: "Returns the Excalidraw element format reference with color palettes, examples, and tips. Call this BEFORE using create_view for the first time.",
+      description: "Returns the Excalidraw element format reference. Call BEFORE create_view. Based on the conversation, infer and pass audience, purpose, and detail_level so the user can confirm with one click.",
       annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+        audience: z.enum(["technical", "executive", "general"])
+          .optional()
+          .describe("Your best guess for the intended audience based on conversation context."),
+        purpose: z.enum(["documentation", "presentation", "brainstorm", "teaching"])
+          .optional()
+          .describe("Your best guess for the diagram's purpose based on conversation context."),
+        detail_level: z.enum(["minimal", "standard", "comprehensive"])
+          .optional()
+          .describe("Your best guess for the level of detail based on complexity of the request."),
+      }),
     },
-    async (): Promise<CallToolResult> => {
-      return { content: [{ type: "text", text: RECALL_CHEAT_SHEET }] };
+    async ({ audience, purpose, detail_level }): Promise<CallToolResult> => {
+      let calibration = "";
+      try {
+        const result = await server.server.elicitInput({
+          message: "I've pre-filled these based on your request — confirm or adjust:",
+          requestedSchema: {
+            type: "object" as const,
+            properties: {
+              audience: {
+                type: "string",
+                title: "Audience",
+                oneOf: [
+                  { const: "technical", title: "Technical (engineers, developers)" },
+                  { const: "executive", title: "Executive (decision makers)" },
+                  { const: "general",   title: "General / mixed audience" },
+                ],
+                default: audience ?? "technical",
+              },
+              purpose: {
+                type: "string",
+                title: "Purpose",
+                oneOf: [
+                  { const: "documentation", title: "Documentation / reference" },
+                  { const: "presentation",  title: "Presentation / slides" },
+                  { const: "brainstorm",    title: "Brainstorming / working session" },
+                  { const: "teaching",      title: "Teaching / explanation" },
+                ],
+                default: purpose ?? "documentation",
+              },
+              detail_level: {
+                type: "string",
+                title: "Level of detail",
+                oneOf: [
+                  { const: "minimal",       title: "Minimal (overview only)" },
+                  { const: "standard",      title: "Standard (key elements)" },
+                  { const: "comprehensive", title: "Comprehensive (full details)" },
+                ],
+                default: detail_level ?? "standard",
+              },
+            },
+            required: ["audience", "purpose", "detail_level"],
+          },
+        });
+
+        if (result.action === "accept" && result.content) {
+          const { audience: aud, purpose: purp, detail_level: det } = result.content as {
+            audience: string;
+            purpose: string;
+            detail_level: string;
+          };
+          calibration = `## Diagram Calibration
+The user confirmed the following preferences for this diagram:
+- Audience: ${aud}
+- Purpose: ${purp}
+- Detail level: ${det}
+
+Apply these preferences when deciding element count, label verbosity, color palette, layout style, and overall complexity.`;
+        }
+      } catch (e) {
+        // Client doesn't support elicitation — fall through silently
+        console.error("[read_me] elicitation failed:", (e as Error).message);
+      }
+
+      const text = calibration
+        ? `${RECALL_CHEAT_SHEET}\n\n${calibration}`
+        : RECALL_CHEAT_SHEET;
+
+      return { content: [{ type: "text", text }] };
     },
   );
 
