@@ -14,7 +14,7 @@ import {
 import morphdom from "morphdom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { initPencilAudio, playStroke } from "./pencil-audio";
-import { captureInitialElements, onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, setCheckpointId } from "./edit-context";
+import { resetInitialSnapshot, onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, setCheckpointId } from "./edit-context";
 import "./global.css";
 
 // ============================================================
@@ -124,12 +124,6 @@ const ExpandIcon = () => (
   </svg>
 );
 
-const SparkleIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M8 1l1.5 5.5L15 8l-5.5 1.5L8 15l-1.5-5.5L1 8l5.5-1.5z" />
-  </svg>
-);
-
 const ExternalLinkIcon = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 8.667V12.667C12 13.035 11.702 13.333 11.333 13.333H3.333C2.965 13.333 2.667 13.035 2.667 12.667V4.667C2.667 4.298 2.965 4 3.333 4H7.333" />
@@ -176,6 +170,23 @@ async function downloadAsPng(elements: any[], appState: any, files: any) {
   a.download = "excalidraw.png";
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** Capture current elements as a 512px PNG and push to model context. */
+async function captureContextPng(app: App, elements: any[]) {
+  if (!elements.length) return;
+  const blob = await exportToBlob({
+    elements,
+    appState: { viewBackgroundColor: "#ffffff", exportBackground: true } as any,
+    files: {},
+    mimeType: "image/png",
+    maxWidthOrHeight: 512,
+  });
+  const buf = await blob.arrayBuffer();
+  const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+  await app.updateModelContext({
+    content: [{ type: "image", data: base64, mimeType: "image/png" }],
+  });
 }
 
 function ShareButton({
@@ -264,85 +275,6 @@ function ShareButton({
                 onClick={() => setState("idle")}
               >
                 Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-function RefineButton({ onSend }: { onSend: (text: string) => Promise<void> }) {
-  const [open, setOpen] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [text, setText] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleOpen = () => {
-    setOpen(true);
-    setText("");
-    requestAnimationFrame(() => textareaRef.current?.focus());
-  };
-
-  const handleSend = async () => {
-    const trimmed = text.trim();
-    if (!trimmed || sending) return;
-    setSending(true);
-    try {
-      await onSend(trimmed);
-      setOpen(false);
-      setText("");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleKeyDown = (e: { key: string; shiftKey: boolean; preventDefault(): void }) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    } else if (e.key === "Escape") {
-      setOpen(false);
-    }
-  };
-
-  return (
-    <>
-      <button
-        className="app-button"
-        style={{ display: "flex", alignItems: "center", gap: 5, width: "auto", padding: "0 10px" }}
-        title="Ask AI to refine the diagram"
-        onClick={handleOpen}
-      >
-        <SparkleIcon />
-        <span style={{ fontSize: "0.75rem", fontWeight: 400 }}>Refine</span>
-      </button>
-
-      {open && (
-        <div className="excalidraw feedback-overlay" onClick={() => !sending && setOpen(false)}>
-          <div className="Island feedback-modal" onClick={(e) => e.stopPropagation()}>
-            <p className="feedback-prompt">Ask AI to refine the diagram:</p>
-            <textarea
-              ref={textareaRef}
-              className="feedback-textarea"
-              placeholder="e.g. Add a database node, use colors, simplify the layout…"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={3}
-              disabled={sending}
-            />
-            <div className="feedback-actions">
-              <button className="standalone" onClick={() => setOpen(false)} disabled={sending}>
-                Cancel
-              </button>
-              <button
-                className="standalone export-modal-confirm"
-                onClick={handleSend}
-                disabled={!text.trim() || sending}
-              >
-                {sending ? "Preparing…" : "Send ↵"}
               </button>
             </div>
           </div>
@@ -620,7 +552,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
 
         // Merge base (converted) + new converted
         const allConverted = base ? [...base, ...convertedNew] : convertedNew;
-        captureInitialElements(allConverted);
+        resetInitialSnapshot();
         // Only set elements if user hasn't edited yet (editedElements means user edits exist)
         if (!editedElements) onElements?.(allConverted);
         if (!editedElements) renderSvgPreview(drawElements, viewport, base);
@@ -854,37 +786,11 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     return () => document.removeEventListener("keydown", handler);
   }, [displayMode, toggleFullscreen]);
 
-  const handleFeedback = useCallback(async (feedbackText: string) => {
-    if (!appRef.current) return;
-    // Capture PNG → updateModelContext (puts diagram in model context silently)
-    try {
-      if (elementsRef.current.length > 0) {
-        const blob = await exportToBlob({
-          elements: elementsRef.current,
-          appState: { viewBackgroundColor: "#ffffff", exportBackground: true } as any,
-          files: {},
-          mimeType: "image/png",
-          maxWidthOrHeight: 512,
-        });
-        const buf = await blob.arrayBuffer();
-        const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-        await appRef.current.updateModelContext({
-          content: [{ type: "image", data: base64, mimeType: "image/png" }],
-        });
-      }
-    } catch (err) {
-      fsLog(`feedback PNG capture failed: ${err}`);
-    }
-    // Pre-fill input box with user text (Claude Desktop requires user to press Enter)
-    try {
-      await (appRef.current as any).sendMessage({
-        role: "user",
-        content: [{ type: "text", text: feedbackText }],
-      });
-    } catch (err) {
-      fsLog(`sendMessage failed: ${err}`);
-    }
-  }, []);
+  // Capture PNG and push to model context whenever elements change
+  useEffect(() => {
+    if (!appRef.current || elements.length === 0) return;
+    captureContextPng(appRef.current, elements).catch(() => {});
+  }, [elements]);
 
   // Preload ALL Excalidraw fonts on first mount (inline mode) so they're
   // cached before fullscreen. Without this, Excalidraw's component init
@@ -1022,7 +928,6 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     <main className={`main${displayMode === "fullscreen" ? " fullscreen" : ""}`} style={displayMode === "fullscreen" && containerHeight ? { height: containerHeight } : undefined}>
       {displayMode === "inline" && (
         <div className="toolbar">
-          <RefineButton onSend={handleFeedback} />
           <ShareButton
             onExport={async () => {
               await shareToExcalidraw({ elements, appState: {}, files: {} }, app);
@@ -1079,7 +984,17 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
             excalidrawAPI={(api) => { setExcalidrawApi(api); fsLog(`excalidrawAPI set`); }}
             initialData={{ elements: elements as any, scrollToContent: true }}
             theme="light"
-            onChange={(els) => onEditorChange(app, els)}
+            onChange={(els) => onEditorChange(els, async (live) => {
+              if (appRef.current) {
+                await captureContextPng(appRef.current, live);
+                if (checkpointIdRef.current) {
+                  appRef.current.callServerTool({
+                    name: "save_checkpoint",
+                    arguments: { id: checkpointIdRef.current, data: JSON.stringify({ elements: live }) },
+                  }).catch(() => {});
+                }
+              }
+            })}
             UIOptions={{
               canvasActions: {
                 saveToActiveFile: false,
