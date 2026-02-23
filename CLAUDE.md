@@ -89,6 +89,8 @@ Two-tier storage for diagram state persistence:
 ## Build
 
 ```bash
+git clone https://github.com/wongfei2009/excalidraw-mcp.git
+cd excalidraw-mcp
 npm install
 npm run build
 ```
