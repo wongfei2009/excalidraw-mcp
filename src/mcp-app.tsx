@@ -157,19 +157,14 @@ async function shareToExcalidraw(data: {elements: any[], appState: any, files: a
   }
 }
 
-async function downloadAsPng(elements: any[], appState: any, files: any) {
+async function copyPngToClipboard(elements: any[], appState: any, files: any) {
   const blob = await exportToBlob({
     elements,
     appState: { viewBackgroundColor: "#ffffff", exportBackground: true, ...appState },
     files: files ?? {},
     mimeType: "image/png",
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "excalidraw.png";
-  a.click();
-  URL.revokeObjectURL(url);
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 }
 
 /** Capture current elements as a 512px PNG and push to model context. */
@@ -193,17 +188,17 @@ function ShareButton({
   onExport,
   onCopyJson,
   onCopySvg,
-  onDownloadPng,
+  onCopyPng,
 }: {
   onExport: () => Promise<void>;
   onCopyJson: () => Promise<void>;
   onCopySvg: () => Promise<void>;
-  onDownloadPng: () => Promise<void>;
+  onCopyPng: () => Promise<void>;
 }) {
   const [state, setState] = useState<"idle" | "confirm" | "uploading">("idle");
   const [copyJsonState, setCopyJsonState] = useState<"idle" | "copied">("idle");
   const [copySvgState, setCopySvgState] = useState<"idle" | "copied">("idle");
-  const [downloadPngState, setDownloadPngState] = useState<"idle" | "downloading">("idle");
+  const [copyPngState, setCopyPngState] = useState<"idle" | "copied">("idle");
 
   const handleExport = async () => {
     setState("uploading");
@@ -226,13 +221,10 @@ function ShareButton({
     setTimeout(() => setCopySvgState("idle"), 2000);
   };
 
-  const handleDownloadPng = async () => {
-    setDownloadPngState("downloading");
-    try {
-      await onDownloadPng();
-    } finally {
-      setDownloadPngState("idle");
-    }
+  const handleCopyPng = async () => {
+    await onCopyPng();
+    setCopyPngState("copied");
+    setTimeout(() => setCopyPngState("idle"), 2000);
   };
 
   return (
@@ -257,17 +249,17 @@ function ShareButton({
             </p>
             <div className="export-modal-actions" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
               <button className="standalone export-modal-confirm" onClick={handleExport}>
-                Export to Excalidraw.com (best for saving/printing)
+                Export to Excalidraw.com
               </button>
               <div style={{ height: 1, background: "var(--border-color)", margin: "4px 0" }} />
               <button className="standalone" onClick={handleCopyJson}>
                 {copyJsonState === "idle" ? "Copy JSON to Clipboard (.excalidraw)" : "✓ JSON Copied!"}
               </button>
               <button className="standalone" onClick={handleCopySvg}>
-                {copySvgState === "idle" ? "Copy SVG to Clipboard (visual diagram)" : "✓ SVG Copied!"}
+                {copySvgState === "idle" ? "Copy SVG to Clipboard" : "✓ SVG Copied!"}
               </button>
-              <button className="standalone" onClick={handleDownloadPng} disabled={downloadPngState === "downloading"}>
-                {downloadPngState === "idle" ? "Download as PNG" : "Downloading…"}
+              <button className="standalone" onClick={handleCopyPng}>
+                {copyPngState === "idle" ? "Copy PNG to Clipboard" : "✓ PNG Copied!"}
               </button>
               <button
                 className="standalone"
@@ -952,11 +944,11 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
                 fsLog(`Copy SVG failed: ${err}`);
               }
             }}
-            onDownloadPng={async () => {
+            onCopyPng={async () => {
               try {
-                await downloadAsPng(elements, {}, {});
+                await copyPngToClipboard(elements, {}, {});
               } catch (err) {
-                fsLog(`Download PNG failed: ${err}`);
+                fsLog(`Copy PNG failed: ${err}`);
               }
             }}
           />
@@ -1041,15 +1033,15 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
                     fsLog(`Copy SVG failed: ${err}`);
                   }
                 }}
-                onDownloadPng={async () => {
+                onCopyPng={async () => {
                   if (!excalidrawApi) return;
                   try {
                     const elements = excalidrawApi.getSceneElements();
                     const appState = excalidrawApi.getAppState();
                     const files = excalidrawApi.getFiles();
-                    await downloadAsPng(elements, appState, files);
+                    await copyPngToClipboard(elements, appState, files);
                   } catch (err) {
-                    fsLog(`Download PNG failed: ${err}`);
+                    fsLog(`Copy PNG failed: ${err}`);
                   }
                 }}
               />
