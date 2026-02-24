@@ -388,6 +388,7 @@ Use the Primary Colors from above — they're bright enough on dark backgrounds.
 
 ## Tips
 - Do NOT call read_me again — you already have everything you need
+- **Modifying an existing diagram?** Use modify_view (not create_view) — it takes a checkpointId and only the changes (new elements + deletes). The current diagram state is restored automatically, including any user edits made in fullscreen.
 - Use the color palette consistently
 - **Text contrast is CRITICAL** — never use light gray (#b0b0b0, #999) on white backgrounds. Minimum text color on white: #757575. For colored text on light fills, use dark variants (#15803d not #22c55e, #2563eb not #4a9eed). White text needs dark backgrounds (#9a5030 not #c4795b)
 - Do NOT use emoji in text — they don't render in Excalidraw's font
@@ -493,15 +494,61 @@ Apply these preferences when deciding element count, label verbosity, color pale
   );
 
   // ============================================================
-  // Tool 2: create_view (Excalidraw SVG)
+  // Shared helper: resolve elements (restoreCheckpoint + deletes), save checkpoint
+  // ============================================================
+  async function resolveAndSave(parsedElements: any[]): Promise<
+    { checkpointId: string; ratioHint: string } | { isError: true; errorMsg: string }
+  > {
+    const restoreEl = parsedElements.find((el: any) => el.type === "restoreCheckpoint");
+    let resolvedElements: any[];
+
+    if (restoreEl?.id) {
+      const base = await store.load(restoreEl.id);
+      if (!base) {
+        return { isError: true, errorMsg: `Checkpoint "${restoreEl.id}" not found — it may have expired or never existed. Please recreate the diagram from scratch.` };
+      }
+      const deleteIds = new Set<string>();
+      for (const el of parsedElements) {
+        if (el.type === "delete") {
+          for (const id of String(el.ids ?? el.id).split(",")) deleteIds.add(id.trim());
+        }
+      }
+      const baseFiltered = base.elements.filter((el: any) =>
+        !deleteIds.has(el.id) && !deleteIds.has(el.containerId)
+      );
+      const newEls = parsedElements.filter((el: any) =>
+        el.type !== "restoreCheckpoint" && el.type !== "delete"
+      );
+      resolvedElements = [...baseFiltered, ...newEls];
+    } else {
+      resolvedElements = parsedElements.filter((el: any) => el.type !== "delete");
+    }
+
+    const cameras = parsedElements.filter((el: any) => el.type === "cameraUpdate");
+    const badRatio = cameras.find((c: any) => {
+      if (!c.width || !c.height) return false;
+      return Math.abs(c.width / c.height - 4 / 3) > 0.15;
+    });
+    const ratioHint = badRatio
+      ? `\nTip: your cameraUpdate used ${badRatio.width}x${badRatio.height} — try to stick with 4:3 aspect ratio (e.g. 400x300, 800x600) in future.`
+      : "";
+
+    const checkpointId = crypto.randomUUID().replace(/-/g, "").slice(0, 18);
+    await store.save(checkpointId, { elements: resolvedElements });
+    return { checkpointId, ratioHint };
+  }
+
+  // ============================================================
+  // Tool 2: create_view (new diagrams only)
   // ============================================================
   registerAppTool(server,
     "create_view",
     {
-      title: "Draw Diagram",
-      description: `Renders a hand-drawn diagram using Excalidraw elements.
+      title: "Draw New Diagram",
+      description: `Renders a BRAND NEW hand-drawn diagram from scratch using Excalidraw elements.
 Elements stream in one by one with draw-on animations.
-Call read_me first to learn the element format.`,
+Call read_me first to learn the element format.
+⚠️ Do NOT use this to modify, update, improve, or change an existing diagram — use modify_view instead.`,
       inputSchema: z.object({
         elements: z.string().describe(
           "JSON array string of Excalidraw elements. Must be valid JSON — no comments, no trailing commas. Keep compact. Call read_me first for format reference."
@@ -527,60 +574,71 @@ Call read_me first to learn the element format.`,
         };
       }
 
-      // Resolve restoreCheckpoint references and save fully resolved state
-      const restoreEl = parsed.find((el: any) => el.type === "restoreCheckpoint");
-      let resolvedElements: any[];
-
-      if (restoreEl?.id) {
-        const base = await store.load(restoreEl.id);
-        if (!base) {
-          return {
-            content: [{ type: "text", text: `Checkpoint "${restoreEl.id}" not found — it may have expired or never existed. Please recreate the diagram from scratch.` }],
-            isError: true,
-          };
-        }
-
-        const deleteIds = new Set<string>();
-        for (const el of parsed) {
-          if (el.type === "delete") {
-            for (const id of String(el.ids ?? el.id).split(",")) deleteIds.add(id.trim());
-          }
-        }
-
-        const baseFiltered = base.elements.filter((el: any) =>
-          !deleteIds.has(el.id) && !deleteIds.has(el.containerId)
-        );
-        const newEls = parsed.filter((el: any) =>
-          el.type !== "restoreCheckpoint" && el.type !== "delete"
-        );
-        resolvedElements = [...baseFiltered, ...newEls];
-      } else {
-        resolvedElements = parsed.filter((el: any) => el.type !== "delete");
+      const result = await resolveAndSave(parsed);
+      if ("isError" in result) {
+        return { content: [{ type: "text", text: result.errorMsg }], isError: true };
       }
-
-      // Check camera aspect ratios — nudge toward 4:3
-      const cameras = parsed.filter((el: any) => el.type === "cameraUpdate");
-      const badRatio = cameras.find((c: any) => {
-        if (!c.width || !c.height) return false;
-        const ratio = c.width / c.height;
-        return Math.abs(ratio - 4 / 3) > 0.15;
-      });
-      const ratioHint = badRatio
-        ? `\nTip: your cameraUpdate used ${badRatio.width}x${badRatio.height} — try to stick with 4:3 aspect ratio (e.g. 400x300, 800x600) in future.`
-        : "";
-
-      const checkpointId = crypto.randomUUID().replace(/-/g, "").slice(0, 18);
-      await store.save(checkpointId, { elements: resolvedElements });
+      const { checkpointId, ratioHint } = result;
       return {
         content: [{ type: "text", text: `Diagram displayed! Checkpoint id: "${checkpointId}".
-If user asks to create a new diagram - simply create a new one from scratch.
-However, if the user wants to edit something on this diagram "${checkpointId}", take these steps:
-1) read widget context (using read_widget_context tool) to check if user made any manual edits first
-2) decide whether you want to make new diagram from scratch OR - use this one as starting checkpoint:
-  simply start from the first element [{"type":"restoreCheckpoint","id":"${checkpointId}"}, ...your new elements...]
-  this will use same diagram state as the user currently sees, including any manual edits they made in fullscreen, allowing you to add elements on top.
-  To remove elements, use: {"type":"delete","ids":"<id1>,<id2>"}${ratioHint}` }],
+⚠️ For ANY follow-up edit or improvement to this diagram, you MUST call modify_view with checkpointId="${checkpointId}" — do NOT call create_view again (that discards this diagram).
+For a completely new unrelated diagram: use create_view.${ratioHint}` }],
         structuredContent: { checkpointId },
+      };
+    },
+  );
+
+  // ============================================================
+  // Tool 2b: modify_view (edit an existing diagram)
+  // ============================================================
+  registerAppTool(server,
+    "modify_view",
+    {
+      title: "Modify Diagram",
+      description: `Use this (NOT create_view) when the user asks to modify an existing diagram in ANY way — including: improve the layout, change colors, add elements, remove elements, fix spacing, make it cleaner, update labels, redesign sections, or any other edit or improvement.
+Automatically restores the current diagram state including any manual user edits made in fullscreen.
+Only provide the CHANGES: new elements to add, and {"type":"delete","ids":"..."} to remove elements.
+The checkpointId is available in the model context (from read_widget_context) or in the previous create_view/modify_view result.
+For a BRAND NEW diagram with no existing state, use create_view instead.`,
+      inputSchema: z.object({
+        checkpointId: z.string().describe(
+          "The checkpointId from the previous create_view or modify_view result. Identifies which diagram to modify."
+        ),
+        elements: z.string().describe(
+          "JSON array of ONLY the changes: new elements to add, and/or delete pseudo-elements. Do NOT re-send the entire diagram — only the additions and deletions."
+        ),
+      }),
+      annotations: { readOnlyHint: true },
+      _meta: { ui: { resourceUri } },
+    },
+    async ({ checkpointId, elements }): Promise<CallToolResult> => {
+      if (elements.length > MAX_INPUT_BYTES) {
+        return {
+          content: [{ type: "text", text: `Elements input exceeds ${MAX_INPUT_BYTES} byte limit.` }],
+          isError: true,
+        };
+      }
+      let parsedChanges: any[];
+      try {
+        parsedChanges = JSON.parse(elements);
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Invalid JSON in elements: ${(e as Error).message}.` }],
+          isError: true,
+        };
+      }
+
+      // Prepend restoreCheckpoint so the resolution logic and widget both work correctly
+      const parsed = [{ type: "restoreCheckpoint", id: checkpointId }, ...parsedChanges];
+      const result = await resolveAndSave(parsed);
+      if ("isError" in result) {
+        return { content: [{ type: "text", text: result.errorMsg }], isError: true };
+      }
+      const { checkpointId: newCheckpointId, ratioHint } = result;
+      return {
+        content: [{ type: "text", text: `Diagram updated! New checkpoint id: "${newCheckpointId}".
+To make further edits: use modify_view with checkpointId="${newCheckpointId}".${ratioHint}` }],
+        structuredContent: { checkpointId: newCheckpointId },
       };
     },
   );

@@ -167,21 +167,26 @@ async function copyPngToClipboard(elements: any[], appState: any, files: any) {
   await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 }
 
-/** Capture current elements as a 512px PNG and push to model context. */
-async function captureContextPng(app: App, elements: any[]) {
+/** Capture current elements as a 1024px PNG and push to model context. */
+async function captureContextPng(app: App, elements: any[], checkpointId?: string | null) {
   if (!elements.length) return;
   const blob = await exportToBlob({
     elements,
     appState: { viewBackgroundColor: "#ffffff", exportBackground: true } as any,
     files: {},
     mimeType: "image/png",
-    maxWidthOrHeight: 512,
+    maxWidthOrHeight: 1024,
   });
   const buf = await blob.arrayBuffer();
   const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-  await app.updateModelContext({
-    content: [{ type: "image", data: base64, mimeType: "image/png" }],
-  });
+  const content: any[] = [{ type: "image", data: base64, mimeType: "image/png" }];
+  if (checkpointId) {
+    content.push({
+      type: "text",
+      text: `Current diagram checkpoint: "${checkpointId}". To modify this diagram (add elements, remove elements, change layout, update colors, improve anything) — call modify_view with checkpointId="${checkpointId}". Do NOT call create_view, which would discard this diagram and start over.`,
+    });
+  }
+  await app.updateModelContext({ content });
 }
 
 function ShareButton({
@@ -734,6 +739,40 @@ const excalidrawLogo = <svg
   const discordIcon = <svg focusable="false" role="img" viewBox="0 0 20 20"  fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g stroke-width="1.25"><path d="M7.5 10.833a.833.833 0 1 0 0-1.666.833.833 0 0 0 0 1.666ZM12.5 10.833a.833.833 0 1 0 0-1.666.833.833 0 0 0 0 1.666ZM6.25 6.25c2.917-.833 4.583-.833 7.5 0M5.833 13.75c2.917.833 5.417.833 8.334 0"></path><path d="M12.917 14.167c0 .833 1.25 2.5 1.666 2.5 1.25 0 2.361-1.39 2.917-2.5.556-1.39.417-4.861-1.25-9.584-1.214-.846-2.5-1.116-3.75-1.25l-.833 2.084M7.083 14.167c0 .833-1.13 2.5-1.526 2.5-1.191 0-2.249-1.39-2.778-2.5-.529-1.39-.397-4.861 1.19-9.584 1.157-.846 2.318-1.116 3.531-1.25l.833 2.084"></path></g></svg>
 
 
+/**
+ * Normalize tool input from any tool into { elements: string } for DiagramView.
+ * Handles modify_view by prepending a restoreCheckpoint element so the widget
+ * works identically to create_view with restoreCheckpoint — no special-casing needed downstream.
+ */
+function normalizeToolInput(input: any): { elements: string } {
+  const name = (input as any)?.name as string | undefined;
+  const args = (input as any)?.arguments ?? input ?? {};
+
+  if (name === "modify_view") {
+    const checkpointId: string = args?.checkpointId ?? "";
+    const changesStr: string = args?.elements ?? "[]";
+    const restoreEl = JSON.stringify({ type: "restoreCheckpoint", id: checkpointId });
+    // Splice restoreCheckpoint as the first element of the changes array string.
+    // changesStr may be partial JSON during streaming — string manipulation is intentional.
+    const trimmed = changesStr.trim();
+    let syntheticElements: string;
+    if (trimmed === "" || trimmed === "[") {
+      syntheticElements = `[${restoreEl}]`;
+    } else if (trimmed.startsWith("[")) {
+      // Insert after the opening "[", before the rest of the array contents
+      const rest = trimmed.slice(1).trim();
+      syntheticElements = rest === "" || rest === "]"
+        ? `[${restoreEl}]`
+        : `[${restoreEl},${trimmed.slice(1)}`;
+    } else {
+      syntheticElements = `[${restoreEl}]`;
+    }
+    return { elements: syntheticElements };
+  }
+
+  return args;
+}
+
 export function ExcalidrawAppCore({ app }: { app: App }) {
   const [toolInput, setToolInput] = useState<any>(null);
   const [inputIsFinal, setInputIsFinal] = useState(false);
@@ -781,7 +820,7 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
   // Capture PNG and push to model context whenever elements change
   useEffect(() => {
     if (!appRef.current || elements.length === 0) return;
-    captureContextPng(appRef.current, elements).catch(() => {});
+    captureContextPng(appRef.current, elements, checkpointIdRef.current).catch(() => {});
   }, [elements]);
 
   // Preload ALL Excalidraw fonts on first mount (inline mode) so they're
@@ -884,15 +923,13 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     };
 
     app.ontoolinputpartial = async (input) => {
-      const args = (input as any)?.arguments || input;
       setInputIsFinal(false);
-      setToolInput(args);
+      setToolInput(normalizeToolInput(input));
     };
 
     app.ontoolinput = async (input) => {
-      const args = (input as any)?.arguments || input;
       setInputIsFinal(true);
-      setToolInput(args);
+      setToolInput(normalizeToolInput(input));
     };
 
     app.ontoolresult = (result: any) => {
@@ -978,7 +1015,7 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
             theme="light"
             onChange={(els) => onEditorChange(els, async (live) => {
               if (appRef.current) {
-                await captureContextPng(appRef.current, live);
+                await captureContextPng(appRef.current, live, checkpointIdRef.current);
                 if (checkpointIdRef.current) {
                   appRef.current.callServerTool({
                     name: "save_checkpoint",
