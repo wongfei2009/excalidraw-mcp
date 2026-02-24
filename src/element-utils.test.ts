@@ -24,9 +24,9 @@ describe("element-utils", () => {
     expect(parsed).toEqual([{ type: "rectangle", id: "r1" }]);
   });
 
-  it("drops the final item for safe streaming", () => {
+  it("keeps first complete item and drops trailing in-flight item", () => {
     expect(excludeIncompleteLastItem([1, 2, 3])).toEqual([1, 2]);
-    expect(excludeIncompleteLastItem([1])).toEqual([]);
+    expect(excludeIncompleteLastItem([1])).toEqual([1]);
   });
 
   it("extracts viewport + restore checkpoint + delete ids", () => {

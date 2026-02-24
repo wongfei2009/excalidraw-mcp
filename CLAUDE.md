@@ -28,18 +28,15 @@ Takes `elements` — a JSON string of standard Excalidraw elements. The widget p
 
 ## Key Design Decisions
 
-### Standard Excalidraw JSON — no extensions
-The input is standard Excalidraw element JSON. No `label` on containers, no `start`/`end` on arrows. These are Excalidraw's internal "skeleton" API (`convertToExcalidrawElements`) — not the standard format.
+### Input format: standard JSON + shorthand support
+The server accepts standard Excalidraw element JSON, and the widget also supports a convenience shorthand (`label` on shapes/arrows) during rendering.
 
-**Why:** Standard format means any `.excalidraw` file's elements array works as input.
+**Why:** Models can stream concise labeled nodes (`label`) while still allowing direct use of standard `.excalidraw` element arrays.
 
-**Trade-off:** Labels require separate text elements with manually computed centered coordinates. The cheat sheet teaches the formula: `x = shape.x + (shape.width - text.width) / 2`.
+**Trade-off:** Because shorthand is converted client-side, behavior is tied to Excalidraw's conversion helpers and font metrics at render time.
 
-### No `convertToExcalidrawElements`
-We tried Excalidraw's skeleton API. Problems:
-1. Needs font metrics at conversion time (canvas `measureText`)
-2. Non-standard format
-3. Added complexity for marginal benefit
+### `convertToExcalidrawElements` is used in the widget pipeline
+`convertToExcalidrawElements` is intentionally used in `src/element-utils.ts` to convert shorthand labeled elements into concrete Excalidraw elements (including bound text) before SVG export.
 
 ### SVG-only rendering (no Excalidraw React canvas)
 The widget uses `exportToSvg` for ALL rendering — no `<Excalidraw>` React component.

@@ -18,7 +18,7 @@ export function parsePartialElements(str: string | undefined): any[] {
 
 export function excludeIncompleteLastItem<T>(arr: T[]): T[] {
     if (!arr || arr.length === 0) return [];
-    if (arr.length <= 1) return [];
+    if (arr.length === 1) return arr;
     return arr.slice(0, -1);
 }
 
