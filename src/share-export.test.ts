@@ -14,7 +14,7 @@ import { captureContextPng, shareToExcalidraw } from "./share-export";
 describe("share-export", () => {
   it("pushes PNG + checkpoint + diff into model context", async () => {
     const app = {
-      updateModelContext: vi.fn(async () => {}),
+      updateModelContext: vi.fn(async () => { }),
     } as any;
 
     await captureContextPng(app, [{ id: "r1" }], "cp_123", "User edited diagram");
@@ -23,14 +23,14 @@ describe("share-export", () => {
     const payload = app.updateModelContext.mock.calls[0][0];
     expect(payload.content[0].text).toMatch(/PNG snapshot/i);
     expect(payload.content[1].type).toBe("image");
-    expect(payload.content[2].text).toBe("User edited diagram");
-    expect(payload.content[3].text).toContain("cp_123");
+    expect(payload.content[2].text).toContain("User edited diagram");
+    expect(payload.content[2].text).toContain("cp_123");
   });
 
   it("does not open link when export tool returns an error", async () => {
     const app = {
       callServerTool: vi.fn(async () => ({ isError: true, content: [{ type: "text", text: "failed" }] })),
-      openLink: vi.fn(async () => {}),
+      openLink: vi.fn(async () => { }),
     } as any;
 
     await shareToExcalidraw({ elements: [{ id: "r1" }], appState: {}, files: {} }, app);
