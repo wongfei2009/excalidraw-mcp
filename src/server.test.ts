@@ -81,4 +81,46 @@ describe("server byte limits", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/exceeds/i);
   });
+
+  it("rejects UTF-8 oversized modify_view payloads", async () => {
+    const server = new FakeServer();
+    registerTools(server as any, "/tmp", fakeStore as any);
+    const modifyView = getHandler(server, "modify_view");
+
+    const text = "😀".repeat(1_400_000);
+    const elements = JSON.stringify([
+      { type: "text", id: "t1", x: 0, y: 0, width: 1, height: 1, text },
+    ]);
+
+    const result = await modifyView({ checkpointId: "cp_ok", elements });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/exceeds/i);
+  });
+
+  it("rejects invalid save_checkpoint schema", async () => {
+    const server = new FakeServer();
+    registerTools(server as any, "/tmp", fakeStore as any);
+    const saveCheckpoint = getHandler(server, "save_checkpoint");
+
+    const data = JSON.stringify({ notElements: [] });
+    const result = await saveCheckpoint({ id: "cp_ok", data });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/invalid checkpoint payload/i);
+    expect(fakeStore.save).not.toHaveBeenCalled();
+  });
+
+  it("accepts valid save_checkpoint schema", async () => {
+    const server = new FakeServer();
+    registerTools(server as any, "/tmp", fakeStore as any);
+    const saveCheckpoint = getHandler(server, "save_checkpoint");
+
+    const data = JSON.stringify({ elements: [] });
+    const result = await saveCheckpoint({ id: "cp_ok", data });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.content[0].text).toBe("ok");
+    expect(fakeStore.save).toHaveBeenCalledWith("cp_ok", { elements: [] });
+  });
 });

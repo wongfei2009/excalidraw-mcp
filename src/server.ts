@@ -13,6 +13,10 @@ import { resolveElementsForCheckpoint } from "./checkpoint-resolution.js";
 /** Maximum allowed size for element/data input strings (5 MB). */
 const MAX_INPUT_BYTES = 5 * 1024 * 1024;
 
+const checkpointPayloadSchema = z.object({
+  elements: z.array(z.unknown()),
+});
+
 function utf8ByteLength(value: string): number {
   return Buffer.byteLength(value, "utf8");
 }
@@ -617,7 +621,7 @@ For a BRAND NEW diagram with no existing state, use create_view instead.`,
       _meta: { ui: { resourceUri } },
     },
     async ({ checkpointId, elements }): Promise<CallToolResult> => {
-      if (elements.length > MAX_INPUT_BYTES) {
+      if (utf8ByteLength(elements) > MAX_INPUT_BYTES) {
         return {
           content: [{ type: "text", text: `Elements input exceeds ${MAX_INPUT_BYTES} byte limit.` }],
           isError: true,
@@ -766,7 +770,14 @@ To make further edits: use modify_view with checkpointId="${newCheckpointId}".${
         };
       }
       try {
-        await store.save(id, JSON.parse(data));
+        const parsed = checkpointPayloadSchema.safeParse(JSON.parse(data));
+        if (!parsed.success) {
+          return {
+            content: [{ type: "text", text: "Invalid checkpoint payload: expected an object with an elements array." }],
+            isError: true,
+          };
+        }
+        await store.save(id, parsed.data);
         return { content: [{ type: "text", text: "ok" }] };
       } catch (err) {
         return { content: [{ type: "text", text: `save failed: ${(err as Error).message}` }], isError: true };
