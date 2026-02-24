@@ -75,11 +75,14 @@ export async function shareToExcalidraw(data: { elements: readonly any[], appSta
 }
 
 export async function copyPngToClipboard(elements: readonly any[], appState: any, files: any) {
+    // A scale of 3 achieves approx 300 DPI assuming a monitor rendering at 100 DPI
+    const scale = 3;
     const blob = await exportToBlob({
         elements,
-        appState: { viewBackgroundColor: "#ffffff", exportBackground: true, ...appState },
+        appState: { ...appState, viewBackgroundColor: "#ffffff", exportBackground: true, exportScale: scale } as any,
         files: files ?? {},
         mimeType: "image/png",
+        getDimensions: (width: number, height: number) => ({ width: width * scale, height: height * scale, scale }),
     });
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 }
