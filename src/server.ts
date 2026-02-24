@@ -13,6 +13,10 @@ import { resolveElementsForCheckpoint } from "./checkpoint-resolution.js";
 /** Maximum allowed size for element/data input strings (5 MB). */
 const MAX_INPUT_BYTES = 5 * 1024 * 1024;
 
+function utf8ByteLength(value: string): number {
+  return Buffer.byteLength(value, "utf8");
+}
+
 // Works both from source (src/server.ts) and compiled (dist/server.js)
 const DIST_DIR = import.meta.filename.endsWith(".ts")
   ? path.join(import.meta.dirname, "..", "dist")
@@ -550,7 +554,7 @@ Call read_me first to learn the element format.
       _meta: { ui: { resourceUri } },
     },
     async ({ elements }): Promise<CallToolResult> => {
-      if (elements.length > MAX_INPUT_BYTES) {
+      if (utf8ByteLength(elements) > MAX_INPUT_BYTES) {
         return {
           content: [{ type: "text", text: `Elements input exceeds ${MAX_INPUT_BYTES} byte limit. Reduce the number of elements or use checkpoints to build incrementally.` }],
           isError: true,
@@ -664,7 +668,7 @@ To make further edits: use modify_view with checkpointId="${newCheckpointId}".${
       _meta: { ui: { visibility: ["app"] } },
     },
     async ({ json }): Promise<CallToolResult> => {
-      if (json.length > MAX_INPUT_BYTES) {
+      if (utf8ByteLength(json) > MAX_INPUT_BYTES) {
         return {
           content: [{ type: "text", text: `Export data exceeds ${MAX_INPUT_BYTES} byte limit.` }],
           isError: true,
@@ -755,7 +759,7 @@ To make further edits: use modify_view with checkpointId="${newCheckpointId}".${
       _meta: { ui: { visibility: ["app"] } },
     },
     async ({ id, data }): Promise<CallToolResult> => {
-      if (data.length > MAX_INPUT_BYTES) {
+      if (utf8ByteLength(data) > MAX_INPUT_BYTES) {
         return {
           content: [{ type: "text", text: `Checkpoint data exceeds ${MAX_INPUT_BYTES} byte limit.` }],
           isError: true,

@@ -18,4 +18,15 @@ describe("MemoryCheckpointStore", () => {
       /Invalid checkpoint id/,
     );
   });
+
+  it("rejects oversized UTF-8 payloads", async () => {
+    const store = new MemoryCheckpointStore();
+    const payload = {
+      elements: [
+        { id: "t1", type: "text", x: 0, y: 0, width: 1, height: 1, text: "😀".repeat(1_400_000) },
+      ],
+    };
+
+    await expect(store.save("cp_big", payload)).rejects.toThrow(/exceeds/i);
+  });
 });

@@ -10,6 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import cors from "cors";
 import type { Request, Response } from "express";
+import { pathToFileURL } from "node:url";
 import { FileCheckpointStore } from "./checkpoint-store.js";
 import { createServer } from "./server.js";
 
@@ -90,7 +91,15 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+const isDirectExecution = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return import.meta.url === pathToFileURL(entry).href;
+})();
+
+if (isDirectExecution) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

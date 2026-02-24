@@ -1,4 +1,5 @@
 import { PENCIL_STROKE_SOFT } from "./sounds";
+import { fsLog } from "./logger";
 
 /**
  * Pencil stroke audio engine.
@@ -38,7 +39,7 @@ export async function initPencilAudio(): Promise<void> {
       softBuffer = await decodeBase64Audio(PENCIL_STROKE_SOFT);
       initialized = true;
     } catch (e) {
-      console.warn("[PencilAudio] Failed to init:", e);
+      fsLog(`[PencilAudio] Failed to init: ${String(e)}`);
     }
   })();
   return initPromise;

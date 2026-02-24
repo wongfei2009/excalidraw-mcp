@@ -4,6 +4,7 @@ import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import morphdom from "morphdom";
 import { initPencilAudio, playStroke } from "./pencil-audio";
 import { captureInitialElements } from "./edit-context";
+import { fsLog } from "./logger";
 import {
     parsePartialElements,
     excludeIncompleteLastItem,
@@ -306,7 +307,7 @@ export function DiagramView({
                 if (!editedElements) renderSvgPreview(drawElements, viewport, base);
             };
             // Note: intentionally unhandled promise as it triggers React side effects 
-            doFinal().catch((e) => console.warn("doFinal failed", e));
+            doFinal().catch((e) => fsLog(`doFinal failed: ${String(e)}`));
             return;
         }
 
@@ -369,7 +370,7 @@ export function DiagramView({
             }
         };
         // Note: intentionally unhandled promise as it triggers React side effects 
-        doStream().catch((e) => console.warn("doStream failed", e));
+        doStream().catch((e) => fsLog(`doStream failed: ${String(e)}`));
     }, [toolInput, isFinal, renderSvgPreview, loadCheckpoint, editedElements, onElements]);
 
     // Render already-converted elements directly (skip convertToExcalidrawElements)
@@ -412,7 +413,7 @@ export function DiagramView({
                     }
                 }
             } catch (err) {
-                console.warn("direct SVG render failed", err)
+                fsLog(`direct SVG render failed: ${String(err)}`);
             }
         })();
     }, [editedElements, applyZoom, ensureFontsLoaded]);

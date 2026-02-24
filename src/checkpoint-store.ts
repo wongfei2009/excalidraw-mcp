@@ -5,6 +5,10 @@ import os from "node:os";
 /** Maximum serialized checkpoint size (5 MB). */
 const MAX_CHECKPOINT_BYTES = 5 * 1024 * 1024;
 
+function utf8ByteLength(value: string): number {
+  return Buffer.byteLength(value, "utf8");
+}
+
 /** Maximum number of checkpoints kept on disk before pruning oldest. */
 const MAX_FILE_CHECKPOINTS = 100;
 
@@ -35,7 +39,7 @@ export class FileCheckpointStore implements CheckpointStore {
   async save(id: string, data: { elements: any[] }): Promise<void> {
     validateCheckpointId(id);
     const serialized = JSON.stringify(data);
-    if (serialized.length > MAX_CHECKPOINT_BYTES) {
+    if (utf8ByteLength(serialized) > MAX_CHECKPOINT_BYTES) {
       throw new Error(`Checkpoint data exceeds ${MAX_CHECKPOINT_BYTES} byte limit`);
     }
     const filePath = path.join(this.dir, `${id}.json`);
@@ -86,7 +90,7 @@ export class MemoryCheckpointStore implements CheckpointStore {
   async save(id: string, data: { elements: any[] }): Promise<void> {
     validateCheckpointId(id);
     const serialized = JSON.stringify(data);
-    if (serialized.length > MAX_CHECKPOINT_BYTES) {
+    if (utf8ByteLength(serialized) > MAX_CHECKPOINT_BYTES) {
       throw new Error(`Checkpoint data exceeds ${MAX_CHECKPOINT_BYTES} byte limit`);
     }
     memoryStore.set(id, serialized);
@@ -120,7 +124,7 @@ export class RedisCheckpointStore implements CheckpointStore {
   async save(id: string, data: { elements: any[] }): Promise<void> {
     validateCheckpointId(id);
     const serialized = JSON.stringify(data);
-    if (serialized.length > MAX_CHECKPOINT_BYTES) {
+    if (utf8ByteLength(serialized) > MAX_CHECKPOINT_BYTES) {
       throw new Error(`Checkpoint data exceeds ${MAX_CHECKPOINT_BYTES} byte limit`);
     }
     const redis = await this.getRedis();
