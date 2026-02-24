@@ -1,7 +1,12 @@
+import type { App } from "@modelcontextprotocol/ext-apps";
+import { captureContextPng } from "./share-export";
+
 const DEBOUNCE_MS = 2000;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let initialSnapshot: string | null = null;
+let initialElementsById: Map<string, any> = new Map();
 let storageKey: string | null = null;
+let checkpointId: string | null = null;
 
 /**
  * Set the localStorage key for this widget instance (use viewUUID or tool-call-derived ID).
@@ -14,17 +19,51 @@ export function setStorageKey(key: string) {
  * Set the checkpoint key for saving state snapshots.
  * Called when ontoolresult delivers the checkpointId from the server.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function setCheckpointId(_id: string) {
-  // kept for API compatibility — checkpointId is now managed via onContextUpdate callback
+export function setCheckpointId(id: string) {
+  checkpointId = id;
 }
 
 /**
- * Reset the initial snapshot so the next onChange call re-initializes it.
- * Call after a new LLM render to avoid treating restored state as "changed".
+ * Call once after final render to capture the baseline element state.
+ * This replaces the old resetInitialSnapshot — it also stores a per-element
+ * map so we can compute a human-readable diff later.
  */
-export function resetInitialSnapshot() {
-  initialSnapshot = null;
+export function captureInitialElements(elements: readonly any[]) {
+  initialSnapshot = JSON.stringify(elements.map((el: any) => el.id + ":" + (el.version ?? 0)));
+  initialElementsById = new Map(elements.map((el: any) => [el.id, el]));
+}
+
+/** Compute a compact diff between initial and current elements. */
+function computeDiff(current: any[]): string {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const moved: string[] = [];
+  const currentIds = new Set<string>();
+
+  for (const el of current) {
+    currentIds.add(el.id);
+    const orig = initialElementsById.get(el.id);
+    if (!orig) {
+      // New element — include type, position, and text if any
+      const desc = `${el.type} "${el.text ?? el.label?.text ?? ""}" at (${Math.round(el.x)},${Math.round(el.y)})`;
+      added.push(desc);
+    } else if (Math.round(orig.x) !== Math.round(el.x) || Math.round(orig.y) !== Math.round(el.y) ||
+      Math.round(orig.width) !== Math.round(el.width) || Math.round(orig.height) !== Math.round(el.height)) {
+      moved.push(`${el.id} → (${Math.round(el.x)},${Math.round(el.y)}) ${Math.round(el.width)}x${Math.round(el.height)}`);
+    }
+  }
+
+  for (const id of initialElementsById.keys()) {
+    if (!currentIds.has(id)) removed.push(id);
+  }
+
+  const parts: string[] = [];
+  if (added.length) parts.push(`Added: ${added.join("; ")}`);
+  if (removed.length) parts.push(`Removed: ${removed.join(", ")}`);
+  if (moved.length) parts.push(`Moved/resized: ${moved.join("; ")}`);
+  if (!parts.length) return "";
+  const cpRef = checkpointId ? ` (checkpoint: ${checkpointId})` : "";
+  return `User edited diagram${cpRef}. ${parts.join(". ")}`;
 }
 
 /**
@@ -53,22 +92,12 @@ export function getLatestEditedElements(): any[] | null {
 }
 
 /**
- * Excalidraw onChange handler. Persists to localStorage and invokes onContextUpdate
- * with the live elements — only when user actually changed something (debounced).
- * Does NOT call setState to avoid infinite re-render loops.
+ * Excalidraw onChange handler. Persists to localStorage and sends updated
+ * elements + PNG + diff to model context — only when user actually changed
+ * something (debounced). Does NOT call setState to avoid infinite re-render loops.
  */
-export function onEditorChange(
-  elements: readonly any[],
-  onContextUpdate: (elements: any[]) => Promise<void>,
-) {
+export function onEditorChange(app: App, elements: readonly any[]) {
   const currentSnapshot = JSON.stringify(elements.map((el: any) => el.id + ":" + (el.version ?? 0)));
-
-  // Lazy-initialize snapshot on first call (after reset or first mount)
-  if (initialSnapshot === null) {
-    initialSnapshot = currentSnapshot;
-    return;
-  }
-
   if (currentSnapshot === initialSnapshot) return;
 
   const live = [...elements].filter((el: any) => !el.isDeleted);
@@ -79,8 +108,16 @@ export function onEditorChange(
     if (storageKey) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(live));
-      } catch {}
+      } catch { }
     }
-    onContextUpdate(live).catch(() => {});
+    if (checkpointId) {
+      app.callServerTool({
+        name: "save_checkpoint",
+        arguments: { id: checkpointId, data: JSON.stringify({ elements: live }) },
+      }).catch(() => { });
+    }
+    // Compute diff and include it alongside the PNG in model context
+    const diff = computeDiff(live);
+    captureContextPng(app, live, checkpointId, diff || undefined).catch(() => { });
   }, DEBOUNCE_MS);
 }

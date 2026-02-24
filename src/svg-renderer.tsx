@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { exportToSvg } from "@excalidraw/excalidraw";
 import morphdom from "morphdom";
 import { initPencilAudio, playStroke } from "./pencil-audio";
-import { resetInitialSnapshot } from "./edit-context";
+import { captureInitialElements } from "./edit-context";
 import {
     parsePartialElements,
     excludeIncompleteLastItem,
@@ -296,7 +296,7 @@ export function DiagramView({
 
                 // Merge base (converted) + new converted
                 const allConverted = base ? [...base, ...convertedNew] : convertedNew;
-                resetInitialSnapshot();
+                captureInitialElements(allConverted);
                 // Only set elements if user hasn't edited yet (editedElements means user edits exist)
                 if (!editedElements) onElements?.(allConverted);
                 if (!editedElements) renderSvgPreview(drawElements, viewport, base);

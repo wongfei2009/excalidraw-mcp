@@ -389,6 +389,8 @@ Use the Primary Colors from above — they're bright enough on dark backgrounds.
 ## Tips
 - Do NOT call read_me again — you already have everything you need
 - **Modifying an existing diagram?** Use modify_view (not create_view) — it takes a checkpointId and only the changes (new elements + deletes). The current diagram state is restored automatically, including any user edits made in fullscreen.
+- **Respect user edits**: When the user manually edits the diagram (in fullscreen edit mode), a diff summary appears in the model context describing what they added, removed, or moved. Always preserve these manual changes — do NOT overwrite or revert them unless the user explicitly asks.
+- **Review the rendered preview**: A PNG snapshot of the current diagram is included in the model context. Before modifying, examine this image to understand the current layout, spacing, and visual state — don't rely solely on the element JSON.
 - Use the color palette consistently
 - **Text contrast is CRITICAL** — never use light gray (#b0b0b0, #999) on white backgrounds. Minimum text color on white: #757575. For colored text on light fills, use dark variants (#15803d not #22c55e, #2563eb not #4a9eed). White text needs dark backgrounds (#9a5030 not #c4795b)
 - Do NOT use emoji in text — they don't render in Excalidraw's font
@@ -436,7 +438,7 @@ export function registerTools(server: McpServer, distDir: string, store: Checkpo
                 oneOf: [
                   { const: "technical", title: "Technical (engineers, developers)" },
                   { const: "executive", title: "Executive (decision makers)" },
-                  { const: "general",   title: "General / mixed audience" },
+                  { const: "general", title: "General / mixed audience" },
                 ],
                 default: audience ?? "technical",
               },
@@ -445,9 +447,9 @@ export function registerTools(server: McpServer, distDir: string, store: Checkpo
                 title: "Purpose",
                 oneOf: [
                   { const: "documentation", title: "Documentation / reference" },
-                  { const: "presentation",  title: "Presentation / slides" },
-                  { const: "brainstorm",    title: "Brainstorming / working session" },
-                  { const: "teaching",      title: "Teaching / explanation" },
+                  { const: "presentation", title: "Presentation / slides" },
+                  { const: "brainstorm", title: "Brainstorming / working session" },
+                  { const: "teaching", title: "Teaching / explanation" },
                 ],
                 default: purpose ?? "documentation",
               },
@@ -455,8 +457,8 @@ export function registerTools(server: McpServer, distDir: string, store: Checkpo
                 type: "string",
                 title: "Level of detail",
                 oneOf: [
-                  { const: "minimal",       title: "Minimal (overview only)" },
-                  { const: "standard",      title: "Standard (key elements)" },
+                  { const: "minimal", title: "Minimal (overview only)" },
+                  { const: "standard", title: "Standard (key elements)" },
                   { const: "comprehensive", title: "Comprehensive (full details)" },
                 ],
                 default: detail_level ?? "standard",
@@ -580,9 +582,11 @@ Call read_me first to learn the element format.
       }
       const { checkpointId, ratioHint } = result;
       return {
-        content: [{ type: "text", text: `Diagram displayed! Checkpoint id: "${checkpointId}".
+        content: [{
+          type: "text", text: `Diagram displayed! Checkpoint id: "${checkpointId}".
 ⚠️ For ANY follow-up edit or improvement to this diagram, you MUST call modify_view with checkpointId="${checkpointId}" — do NOT call create_view again (that discards this diagram).
-For a completely new unrelated diagram: use create_view.${ratioHint}` }],
+For a completely new unrelated diagram: use create_view.${ratioHint}`
+        }],
         structuredContent: { checkpointId },
       };
     },
@@ -598,6 +602,7 @@ For a completely new unrelated diagram: use create_view.${ratioHint}` }],
       description: `Use this (NOT create_view) when the user asks to modify an existing diagram in ANY way — including: improve the layout, change colors, add elements, remove elements, fix spacing, make it cleaner, update labels, redesign sections, or any other edit or improvement.
 Automatically restores the current diagram state including any manual user edits made in fullscreen.
 Only provide the CHANGES: new elements to add, and {"type":"delete","ids":"..."} to remove elements.
+IMPORTANT: Check the model context for user edit diffs — if the user manually added, moved, or removed elements, respect those changes and do not overwrite or revert them.
 The checkpointId is available in the model context (from read_widget_context) or in the previous create_view/modify_view result.
 For a BRAND NEW diagram with no existing state, use create_view instead.`,
       inputSchema: z.object({
@@ -636,8 +641,10 @@ For a BRAND NEW diagram with no existing state, use create_view instead.`,
       }
       const { checkpointId: newCheckpointId, ratioHint } = result;
       return {
-        content: [{ type: "text", text: `Diagram updated! New checkpoint id: "${newCheckpointId}".
-To make further edits: use modify_view with checkpointId="${newCheckpointId}".${ratioHint}` }],
+        content: [{
+          type: "text", text: `Diagram updated! New checkpoint id: "${newCheckpointId}".
+To make further edits: use modify_view with checkpointId="${newCheckpointId}".${ratioHint}`
+        }],
         structuredContent: { checkpointId: newCheckpointId },
       };
     },

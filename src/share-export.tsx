@@ -81,8 +81,9 @@ export async function copyJsonToClipboard(elements: any[], appState: any = {}, f
     await navigator.clipboard.writeText(json);
 }
 
-/** Capture current elements as a 1024px PNG and push to model context. */
-export async function captureContextPng(app: App, elements: any[], checkpointId?: string | null) {
+/** Capture current elements as a 1024px PNG and push to model context.
+ *  Optionally includes a human-readable diff of user manual edits. */
+export async function captureContextPng(app: App, elements: any[], checkpointId?: string | null, diffText?: string) {
     if (!elements.length) return;
     const blob = await exportToBlob({
         elements,
@@ -93,7 +94,13 @@ export async function captureContextPng(app: App, elements: any[], checkpointId?
     });
     const buf = await blob.arrayBuffer();
     const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-    const content: any[] = [{ type: "image", data: base64, mimeType: "image/png" }];
+    const content: any[] = [
+        { type: "text", text: "Below is a PNG snapshot of the current diagram as the user sees it. Review it to understand the current layout before making changes." },
+        { type: "image", data: base64, mimeType: "image/png" },
+    ];
+    if (diffText) {
+        content.push({ type: "text", text: diffText });
+    }
     if (checkpointId) {
         content.push({
             type: "text",

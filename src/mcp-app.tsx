@@ -298,17 +298,7 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
             excalidrawAPI={(api) => { setExcalidrawApi(api); fsLog(`excalidrawAPI set`); }}
             initialData={{ elements: elements as any, scrollToContent: true }}
             theme="light"
-            onChange={(els) => onEditorChange(els, async (live) => {
-              if (appRef.current) {
-                await captureContextPng(appRef.current, live, checkpointIdRef.current);
-                if (checkpointIdRef.current) {
-                  appRef.current.callServerTool({
-                    name: "save_checkpoint",
-                    arguments: { id: checkpointIdRef.current, data: JSON.stringify({ elements: live }) },
-                  }).catch(() => { });
-                }
-              }
-            })}
+            onChange={(els) => { if (appRef.current) onEditorChange(appRef.current, els); }}
             UIOptions={{
               canvasActions: {
                 saveToActiveFile: false,
