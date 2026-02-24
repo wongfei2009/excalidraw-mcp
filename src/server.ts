@@ -396,10 +396,20 @@ Then use these colors on the dark background:
 **Stroke/arrow colors (on dark):**
 Use the Primary Colors from above — they're bright enough on dark backgrounds. For shape borders, use slightly lighter variants or \`#555555\` for subtle outlines.
 
+## CRITICAL: Preserving User Edits
+
+When the user manually edits the diagram in fullscreen mode, the model context will include:
+- An updated PNG snapshot reflecting their changes
+- A diff listing exactly what changed, with new values (e.g. \`text="New label the user typed"\`, \`strokeColor="#ef4444"\`)
+
+**Rules you MUST follow:**
+1. Never revert or overwrite a user-edited element unless the user explicitly asks you to change it
+2. When continuing from a checkpoint, those user edits are already baked in — do NOT re-emit element fields the user modified
+3. Always use **modify_view** (not create_view) to continue from an existing diagram — create_view discards all user edits
+
 ## Tips
 - Do NOT call read_me again — you already have everything you need
 - **Modifying an existing diagram?** Use modify_view (not create_view) — it takes a checkpointId and only the changes (new elements + deletes). The current diagram state is restored automatically, including any user edits made in fullscreen.
-- **Respect user edits**: When the user manually edits the diagram (in fullscreen edit mode), a diff summary appears in the model context describing what they added, removed, moved, or modified (e.g. stroke style, colors, text). Always preserve these manual changes — do NOT overwrite or revert them unless the user explicitly asks.
 - **Review the rendered preview**: A PNG snapshot of the current diagram is included in the model context. Before modifying, examine this image to understand the current layout, spacing, and visual state — don't rely solely on the element JSON.
 - Use the color palette consistently
 - **Text contrast is CRITICAL** — never use light gray (#b0b0b0, #999) on white backgrounds. Minimum text color on white: #757575. For colored text on light fills, use dark variants (#15803d not #22c55e, #2563eb not #4a9eed). White text needs dark backgrounds (#9a5030 not #c4795b)

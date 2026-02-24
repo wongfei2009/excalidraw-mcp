@@ -114,14 +114,26 @@ export async function captureContextPng(app: App, elements: readonly any[], chec
         { type: "text", text: "Below is a PNG snapshot of the current diagram as the user sees it. Review it to understand the current layout before making changes." },
         { type: "image", data: base64, mimeType: "image/png" },
     ];
-    if (diffText) {
-        content.push({ type: "text", text: diffText });
-    }
     if (checkpointId) {
-        content.push({
-            type: "text",
-            text: `Current diagram checkpoint: "${checkpointId}". To modify this diagram (add elements, remove elements, change layout, update colors, improve anything) — call modify_view with checkpointId="${checkpointId}". Do NOT call create_view, which would discard this diagram and start over.`,
-        });
+        let msg: string;
+        if (diffText) {
+            msg =
+                `IMPORTANT — The user manually edited this diagram.\n` +
+                `${diffText}\n\n` +
+                `These edits are already saved in checkpoint "${checkpointId}". When you call modify_view, ` +
+                `the checkpoint is restored WITH all user edits applied. ` +
+                `Do NOT recreate, revert, or overwrite any user-modified element — only add net-new elements or targeted deletes. ` +
+                `Do NOT call create_view (it discards all user edits).`;
+        } else {
+            msg =
+                `Current diagram checkpoint: "${checkpointId}". ` +
+                `To modify this diagram (add elements, remove elements, change layout, update colors, improve anything) ` +
+                `— call modify_view with checkpointId="${checkpointId}". ` +
+                `Do NOT call create_view, which would discard this diagram and start over.`;
+        }
+        content.push({ type: "text", text: msg });
+    } else if (diffText) {
+        content.push({ type: "text", text: `IMPORTANT — The user manually edited this diagram:\n${diffText}` });
     }
     await app.updateModelContext({ content });
 }

@@ -73,19 +73,22 @@ function computeDiff(current: any[]): string {
         Math.round(orig.width) !== Math.round(el.width) || Math.round(orig.height) !== Math.round(el.height)) {
         moved.push(`${el.id} → (${Math.round(el.x)},${Math.round(el.y)}) ${Math.round(el.width)}x${Math.round(el.height)}`);
       }
-      // Check style/content property changes
-      const changedProps: string[] = [];
+      // Check style/content property changes — include actual new values
+      const details: string[] = [];
       for (const key of STYLE_KEYS) {
         if (JSON.stringify(orig[key]) !== JSON.stringify(el[key])) {
-          changedProps.push(key);
+          const newVal = el[key];
+          const valStr = typeof newVal === "string" ? `"${newVal}"` : JSON.stringify(newVal);
+          details.push(`${key}=${valStr}`);
         }
       }
       // Also check label text changes
       if (JSON.stringify(orig.label) !== JSON.stringify(el.label)) {
-        changedProps.push("label");
+        const newText = el.label?.text ?? "";
+        details.push(`label="${newText}"`);
       }
-      if (changedProps.length > 0) {
-        modified.push(`${el.id} (${changedProps.join(", ")})`);
+      if (details.length > 0) {
+        modified.push(`${el.id}: ${details.join(", ")}`);
       }
     }
   }
