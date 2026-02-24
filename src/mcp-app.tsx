@@ -7,7 +7,7 @@ import {
   MainMenu,
 } from "@excalidraw/excalidraw";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, setCheckpointId } from "./edit-context";
+import { onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, setCheckpointId, resetEditSession } from "./edit-context";
 import { fsLog, setLogFn } from "./logger";
 import { normalizeToolInput } from "./element-utils";
 import type { ViewportRect } from "./element-utils";
@@ -228,6 +228,8 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
       if (cpId) {
         checkpointIdRef.current = cpId;
         setCheckpointId(cpId);
+        resetEditSession();
+        setUserEdits(null);
         // Use checkpointId as localStorage key for persisting user edits
         setStorageKey(cpId);
         // Check for persisted edits from a previous fullscreen session

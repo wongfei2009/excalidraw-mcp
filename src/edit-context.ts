@@ -24,6 +24,19 @@ export function setCheckpointId(id: string) {
 }
 
 /**
+ * Reset transient edit session state when switching diagrams/checkpoints.
+ */
+export function resetEditSession() {
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  initialSnapshot = null;
+  initialElementsById = new Map();
+  latestEditedElements = null;
+}
+
+/**
  * Call once after final render to capture the baseline element state.
  * This replaces the old resetInitialSnapshot — it also stores a per-element
  * map so we can compute a human-readable diff later.

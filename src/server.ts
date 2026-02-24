@@ -575,6 +575,12 @@ Call read_me first to learn the element format.
           isError: true,
         };
       }
+      if (!Array.isArray(parsed)) {
+        return {
+          content: [{ type: "text", text: "Invalid elements payload: expected a JSON array of Excalidraw elements." }],
+          isError: true,
+        };
+      }
 
       const result = await resolveAndSave(parsed);
       if ("isError" in result) {
@@ -629,6 +635,12 @@ For a BRAND NEW diagram with no existing state, use create_view instead.`,
       } catch (e) {
         return {
           content: [{ type: "text", text: `Invalid JSON in elements: ${(e as Error).message}.` }],
+          isError: true,
+        };
+      }
+      if (!Array.isArray(parsedChanges)) {
+        return {
+          content: [{ type: "text", text: "Invalid elements payload: expected a JSON array containing only add/delete changes." }],
           isError: true,
         };
       }
