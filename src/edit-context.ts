@@ -38,7 +38,14 @@ function computeDiff(current: any[]): string {
   const added: string[] = [];
   const removed: string[] = [];
   const moved: string[] = [];
+  const modified: string[] = [];
   const currentIds = new Set<string>();
+
+  /** Properties to check for style/content changes (beyond position/size). */
+  const STYLE_KEYS = [
+    "strokeColor", "backgroundColor", "strokeStyle", "strokeWidth",
+    "opacity", "fontSize", "text", "fillStyle", "roundness", "fontFamily",
+  ] as const;
 
   for (const el of current) {
     currentIds.add(el.id);
@@ -47,9 +54,26 @@ function computeDiff(current: any[]): string {
       // New element — include type, position, and text if any
       const desc = `${el.type} "${el.text ?? el.label?.text ?? ""}" at (${Math.round(el.x)},${Math.round(el.y)})`;
       added.push(desc);
-    } else if (Math.round(orig.x) !== Math.round(el.x) || Math.round(orig.y) !== Math.round(el.y) ||
-      Math.round(orig.width) !== Math.round(el.width) || Math.round(orig.height) !== Math.round(el.height)) {
-      moved.push(`${el.id} → (${Math.round(el.x)},${Math.round(el.y)}) ${Math.round(el.width)}x${Math.round(el.height)}`);
+    } else {
+      // Check position/size changes
+      if (Math.round(orig.x) !== Math.round(el.x) || Math.round(orig.y) !== Math.round(el.y) ||
+        Math.round(orig.width) !== Math.round(el.width) || Math.round(orig.height) !== Math.round(el.height)) {
+        moved.push(`${el.id} → (${Math.round(el.x)},${Math.round(el.y)}) ${Math.round(el.width)}x${Math.round(el.height)}`);
+      }
+      // Check style/content property changes
+      const changedProps: string[] = [];
+      for (const key of STYLE_KEYS) {
+        if (JSON.stringify(orig[key]) !== JSON.stringify(el[key])) {
+          changedProps.push(key);
+        }
+      }
+      // Also check label text changes
+      if (JSON.stringify(orig.label) !== JSON.stringify(el.label)) {
+        changedProps.push("label");
+      }
+      if (changedProps.length > 0) {
+        modified.push(`${el.id} (${changedProps.join(", ")})`);
+      }
     }
   }
 
@@ -61,6 +85,7 @@ function computeDiff(current: any[]): string {
   if (added.length) parts.push(`Added: ${added.join("; ")}`);
   if (removed.length) parts.push(`Removed: ${removed.join(", ")}`);
   if (moved.length) parts.push(`Moved/resized: ${moved.join("; ")}`);
+  if (modified.length) parts.push(`Modified: ${modified.join("; ")}`);
   if (!parts.length) return "";
   const cpRef = checkpointId ? ` (checkpoint: ${checkpointId})` : "";
   return `User edited diagram${cpRef}. ${parts.join(". ")}`;

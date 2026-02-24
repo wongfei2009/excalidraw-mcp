@@ -389,7 +389,7 @@ Use the Primary Colors from above — they're bright enough on dark backgrounds.
 ## Tips
 - Do NOT call read_me again — you already have everything you need
 - **Modifying an existing diagram?** Use modify_view (not create_view) — it takes a checkpointId and only the changes (new elements + deletes). The current diagram state is restored automatically, including any user edits made in fullscreen.
-- **Respect user edits**: When the user manually edits the diagram (in fullscreen edit mode), a diff summary appears in the model context describing what they added, removed, or moved. Always preserve these manual changes — do NOT overwrite or revert them unless the user explicitly asks.
+- **Respect user edits**: When the user manually edits the diagram (in fullscreen edit mode), a diff summary appears in the model context describing what they added, removed, moved, or modified (e.g. stroke style, colors, text). Always preserve these manual changes — do NOT overwrite or revert them unless the user explicitly asks.
 - **Review the rendered preview**: A PNG snapshot of the current diagram is included in the model context. Before modifying, examine this image to understand the current layout, spacing, and visual state — don't rely solely on the element JSON.
 - Use the color palette consistently
 - **Text contrast is CRITICAL** — never use light gray (#b0b0b0, #999) on white backgrounds. Minimum text color on white: #757575. For colored text on light fills, use dark variants (#15803d not #22c55e, #2563eb not #4a9eed). White text needs dark backgrounds (#9a5030 not #c4795b)
@@ -602,7 +602,7 @@ For a completely new unrelated diagram: use create_view.${ratioHint}`
       description: `Use this (NOT create_view) when the user asks to modify an existing diagram in ANY way — including: improve the layout, change colors, add elements, remove elements, fix spacing, make it cleaner, update labels, redesign sections, or any other edit or improvement.
 Automatically restores the current diagram state including any manual user edits made in fullscreen.
 Only provide the CHANGES: new elements to add, and {"type":"delete","ids":"..."} to remove elements.
-IMPORTANT: Check the model context for user edit diffs — if the user manually added, moved, or removed elements, respect those changes and do not overwrite or revert them.
+IMPORTANT: Check the model context for user edit diffs — if the user manually added, moved, removed, or modified elements (e.g. changed colors, stroke style, text), respect those changes and do not overwrite or revert them.
 The checkpointId is available in the model context (from read_widget_context) or in the previous create_view/modify_view result.
 For a BRAND NEW diagram with no existing state, use create_view instead.`,
       inputSchema: z.object({
