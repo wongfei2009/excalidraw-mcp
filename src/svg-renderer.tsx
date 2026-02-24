@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { exportToSvg } from "@excalidraw/excalidraw";
+import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import morphdom from "morphdom";
 import { initPencilAudio, playStroke } from "./pencil-audio";
 import { captureInitialElements } from "./edit-context";
@@ -68,17 +69,17 @@ export function DiagramView({
     onViewport,
     loadCheckpoint
 }: {
-    toolInput: any;
+    toolInput: { elements?: string | unknown[] } | null;
     isFinal: boolean;
     displayMode: string;
-    onElements?: (els: any[]) => void;
-    editedElements?: any[];
+    onElements?: (els: ExcalidrawElement[]) => void;
+    editedElements?: ExcalidrawElement[];
     onViewport?: (vp: ViewportRect) => void;
-    loadCheckpoint?: (id: string) => Promise<{ elements: any[] } | null>
+    loadCheckpoint?: (id: string) => Promise<{ elements: ExcalidrawElement[] } | null>
 }) {
     const svgRef = useRef<HTMLDivElement | null>(null);
-    const latestRef = useRef<any[]>([]);
-    const restoredRef = useRef<{ id: string; elements: any[] } | null>(null);
+    const latestRef = useRef<unknown[]>([]);
+    const restoredRef = useRef<{ id: string; elements: ExcalidrawElement[] } | null>(null);
     const [, setCount] = useState(0);
 
     // Init pencil audio on first mount
@@ -170,15 +171,15 @@ export function DiagramView({
         return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
     }, []);
 
-    const renderSvgPreview = useCallback(async (els: any[], viewport: ViewportRect | null, baseElements?: any[]) => {
+    const renderSvgPreview = useCallback(async (els: unknown[], viewport: ViewportRect | null, baseElements?: ExcalidrawElement[]) => {
         if ((els.length === 0 && !baseElements?.length) || !svgRef.current) return;
         try {
             // Wait for Virgil font to load before computing text metrics
             await ensureFontsLoaded();
 
             // Convert new elements (raw → Excalidraw format)
-            const convertedNew = convertRawElements(els);
-            const baseReal = baseElements?.filter((el: any) => el.type !== "cameraUpdate") ?? [];
+            const convertedNew = convertRawElements(els) as ExcalidrawElement[];
+            const baseReal = baseElements ?? [];
             const excalidrawEls = [...baseReal, ...convertedNew];
 
             // Update scene bounds from all elements
@@ -189,7 +190,7 @@ export function DiagramView({
                 appState: { viewBackgroundColor: "transparent", exportBackground: false } as any,
                 files: null,
                 exportPadding: EXPORT_PADDING,
-                skipInliningFonts: true,
+                skipInliningFonts: false,
             });
             if (!svgRef.current) return;
 
@@ -271,7 +272,7 @@ export function DiagramView({
             let { viewport, drawElements, restoreId, deleteIds } = extractViewportAndElements(parsed);
 
             // Load checkpoint base if restoring (async — from server)
-            let base: any[] | undefined;
+            let base: ExcalidrawElement[] | undefined;
             const doFinal = async () => {
                 if (restoreId && loadCheckpoint) {
                     const saved = await loadCheckpoint(restoreId);
@@ -283,16 +284,19 @@ export function DiagramView({
                             if (cam) viewport = { x: cam.x, y: cam.y, width: cam.width, height: cam.height };
                         }
                         // Convert base with convertRawElements (handles both raw and already-converted)
-                        base = convertRawElements(base);
+                        base = convertRawElements(base) as ExcalidrawElement[];
                     }
                     if (base && deleteIds.size > 0) {
-                        base = base.filter((el: any) => !deleteIds.has(el.id) && !deleteIds.has(el.containerId));
+                        base = base.filter((el) => {
+                            const containerId = (el as { containerId?: string }).containerId;
+                            return !deleteIds.has(el.id) && !(containerId && deleteIds.has(containerId));
+                        });
                     }
                 }
 
                 latestRef.current = drawElements;
                 // Convert new elements for fullscreen editor
-                const convertedNew = convertRawElements(drawElements);
+                const convertedNew = convertRawElements(drawElements) as ExcalidrawElement[];
 
                 // Merge base (converted) + new converted
                 const allConverted = base ? [...base, ...convertedNew] : convertedNew;
@@ -324,13 +328,13 @@ export function DiagramView({
 
         const doStream = async () => {
             // Load checkpoint base (once per restoreId) — from server via callServerTool
-            let base: any[] | undefined;
+            let base: ExcalidrawElement[] | undefined;
             if (streamRestoreId) {
                 if (!restoredRef.current || restoredRef.current.id !== streamRestoreId) {
                     if (loadCheckpoint) {
                         const saved = await loadCheckpoint(streamRestoreId);
                         if (saved) {
-                            const converted = convertRawElements(saved.elements);
+                            const converted = convertRawElements(saved.elements) as ExcalidrawElement[];
                             restoredRef.current = { id: streamRestoreId, elements: converted };
                         }
                     }
@@ -342,7 +346,10 @@ export function DiagramView({
                     if (cam) viewport = { x: cam.x, y: cam.y, width: cam.width, height: cam.height };
                 }
                 if (base && streamDeleteIds.size > 0) {
-                    base = base.filter((el: any) => !streamDeleteIds.has(el.id) && !streamDeleteIds.has(el.containerId));
+                    base = base.filter((el) => {
+                        const containerId = (el as { containerId?: string }).containerId;
+                        return !streamDeleteIds.has(el.id) && !(containerId && streamDeleteIds.has(containerId));
+                    });
                 }
             }
 
@@ -354,7 +361,7 @@ export function DiagramView({
                 }
                 latestRef.current = drawElements;
                 setCount(drawElements.length);
-                const jittered = drawElements.map((el: any) => ({ ...el, seed: Math.floor(Math.random() * 1e9) }));
+                const jittered = drawElements.map((el) => ({ ...(el as object), seed: Math.floor(Math.random() * 1e9) }));
                 renderSvgPreview(jittered, viewport, base);
             } else if (base && base.length > 0 && latestRef.current.length === 0) {
                 // First render: show restored base before new elements stream in
@@ -376,7 +383,7 @@ export function DiagramView({
                     appState: { viewBackgroundColor: "transparent", exportBackground: false } as any,
                     files: null,
                     exportPadding: EXPORT_PADDING,
-                    skipInliningFonts: true,
+                    skipInliningFonts: false,
                 });
                 if (!svgRef.current) return;
                 let wrapper = svgRef.current.querySelector(".svg-wrapper") as HTMLDivElement | null;

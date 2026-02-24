@@ -8,6 +8,18 @@ import { deflateSync } from "node:zlib";
 import { z } from "zod/v4";
 import type { CheckpointStore } from "./checkpoint-store.js";
 
+type RawElement = {
+  type?: string;
+  id?: string;
+  ids?: string;
+  containerId?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  [key: string]: unknown;
+};
+
 /** Maximum allowed size for element/data input strings (5 MB). */
 const MAX_INPUT_BYTES = 5 * 1024 * 1024;
 
@@ -498,11 +510,11 @@ Apply these preferences when deciding element count, label verbosity, color pale
   // ============================================================
   // Shared helper: resolve elements (restoreCheckpoint + deletes), save checkpoint
   // ============================================================
-  async function resolveAndSave(parsedElements: any[]): Promise<
+  async function resolveAndSave(parsedElements: RawElement[]): Promise<
     { checkpointId: string; ratioHint: string } | { isError: true; errorMsg: string }
   > {
-    const restoreEl = parsedElements.find((el: any) => el.type === "restoreCheckpoint");
-    let resolvedElements: any[];
+    const restoreEl = parsedElements.find((el) => el.type === "restoreCheckpoint");
+    let resolvedElements: RawElement[];
 
     if (restoreEl?.id) {
       const base = await store.load(restoreEl.id);
@@ -512,22 +524,22 @@ Apply these preferences when deciding element count, label verbosity, color pale
       const deleteIds = new Set<string>();
       for (const el of parsedElements) {
         if (el.type === "delete") {
-          for (const id of String(el.ids ?? el.id).split(",")) deleteIds.add(id.trim());
+          for (const id of String(el.ids ?? el.id ?? "").split(",")) deleteIds.add(id.trim());
         }
       }
-      const baseFiltered = base.elements.filter((el: any) =>
-        !deleteIds.has(el.id) && !deleteIds.has(el.containerId)
+      const baseFiltered = (base.elements as RawElement[]).filter((el) =>
+        !deleteIds.has(String(el.id ?? "")) && !deleteIds.has(String(el.containerId ?? ""))
       );
-      const newEls = parsedElements.filter((el: any) =>
+      const newEls = parsedElements.filter((el) =>
         el.type !== "restoreCheckpoint" && el.type !== "delete"
       );
       resolvedElements = [...baseFiltered, ...newEls];
     } else {
-      resolvedElements = parsedElements.filter((el: any) => el.type !== "delete");
+      resolvedElements = parsedElements.filter((el) => el.type !== "delete");
     }
 
-    const cameras = parsedElements.filter((el: any) => el.type === "cameraUpdate");
-    const badRatio = cameras.find((c: any) => {
+    const cameras = parsedElements.filter((el) => el.type === "cameraUpdate");
+    const badRatio = cameras.find((c) => {
       if (!c.width || !c.height) return false;
       return Math.abs(c.width / c.height - 4 / 3) > 0.15;
     });
@@ -566,9 +578,9 @@ Call read_me first to learn the element format.
           isError: true,
         };
       }
-      let parsed: any[];
+      let parsed: RawElement[];
       try {
-        parsed = JSON.parse(elements);
+        parsed = JSON.parse(elements) as RawElement[];
       } catch (e) {
         return {
           content: [{ type: "text", text: `Invalid JSON in elements: ${(e as Error).message}. Ensure no comments, no trailing commas, and proper quoting.` }],
@@ -629,9 +641,9 @@ For a BRAND NEW diagram with no existing state, use create_view instead.`,
           isError: true,
         };
       }
-      let parsedChanges: any[];
+      let parsedChanges: RawElement[];
       try {
-        parsedChanges = JSON.parse(elements);
+        parsedChanges = JSON.parse(elements) as RawElement[];
       } catch (e) {
         return {
           content: [{ type: "text", text: `Invalid JSON in elements: ${(e as Error).message}.` }],
@@ -646,7 +658,7 @@ For a BRAND NEW diagram with no existing state, use create_view instead.`,
       }
 
       // Prepend restoreCheckpoint so the resolution logic and widget both work correctly
-      const parsed = [{ type: "restoreCheckpoint", id: checkpointId }, ...parsedChanges];
+      const parsed: RawElement[] = [{ type: "restoreCheckpoint", id: checkpointId }, ...parsedChanges];
       const result = await resolveAndSave(parsed);
       if ("isError" in result) {
         return { content: [{ type: "text", text: result.errorMsg }], isError: true };

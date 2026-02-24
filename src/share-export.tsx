@@ -7,6 +7,23 @@ import {
 import { useState } from "react";
 import { fsLog } from "./logger";
 
+async function blobToBase64(blob: Blob): Promise<string> {
+    return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error ?? new Error("Failed to read blob"));
+        reader.onloadend = () => {
+            const result = reader.result;
+            if (typeof result !== "string") {
+                reject(new Error("Unexpected FileReader result type"));
+                return;
+            }
+            const commaIndex = result.indexOf(",");
+            resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+        };
+        reader.readAsDataURL(blob);
+    });
+}
+
 // ============================================================
 // Icons
 // ============================================================
@@ -32,7 +49,7 @@ export const ExternalLinkIcon = () => (
 // Export utilities
 // ============================================================
 
-export async function shareToExcalidraw(data: { elements: any[], appState: any, files: any }, app: App) {
+export async function shareToExcalidraw(data: { elements: readonly any[], appState: any, files: any }, app: App) {
     try {
         if (!data.elements?.length) return;
 
@@ -57,7 +74,7 @@ export async function shareToExcalidraw(data: { elements: any[], appState: any, 
     }
 }
 
-export async function copyPngToClipboard(elements: any[], appState: any, files: any) {
+export async function copyPngToClipboard(elements: readonly any[], appState: any, files: any) {
     const blob = await exportToBlob({
         elements,
         appState: { viewBackgroundColor: "#ffffff", exportBackground: true, ...appState },
@@ -67,7 +84,7 @@ export async function copyPngToClipboard(elements: any[], appState: any, files: 
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 }
 
-export async function copySvgToClipboard(elements: any[], appState: any = {}, files: any = {}) {
+export async function copySvgToClipboard(elements: readonly any[], appState: any = {}, files: any = {}) {
     const svg = await exportToSvg({
         elements,
         appState: { viewBackgroundColor: "#ffffff", exportBackground: true, ...appState },
@@ -76,14 +93,14 @@ export async function copySvgToClipboard(elements: any[], appState: any = {}, fi
     await navigator.clipboard.writeText(svg.outerHTML);
 }
 
-export async function copyJsonToClipboard(elements: any[], appState: any = {}, files: any = {}) {
+export async function copyJsonToClipboard(elements: readonly any[], appState: any = {}, files: any = {}) {
     const json = serializeAsJSON(elements, appState, files, "database");
     await navigator.clipboard.writeText(json);
 }
 
 /** Capture current elements as a 1024px PNG and push to model context.
  *  Optionally includes a human-readable diff of user manual edits. */
-export async function captureContextPng(app: App, elements: any[], checkpointId?: string | null, diffText?: string) {
+export async function captureContextPng(app: App, elements: readonly any[], checkpointId?: string | null, diffText?: string) {
     if (!elements.length) return;
     const blob = await exportToBlob({
         elements,
@@ -92,8 +109,7 @@ export async function captureContextPng(app: App, elements: any[], checkpointId?
         mimeType: "image/png",
         maxWidthOrHeight: 1024,
     });
-    const buf = await blob.arrayBuffer();
-    const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+    const base64 = await blobToBase64(blob);
     const content: any[] = [
         { type: "text", text: "Below is a PNG snapshot of the current diagram as the user sees it. Review it to understand the current layout before making changes." },
         { type: "image", data: base64, mimeType: "image/png" },

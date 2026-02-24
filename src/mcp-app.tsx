@@ -6,6 +6,8 @@ import {
   CaptureUpdateAction,
   MainMenu,
 } from "@excalidraw/excalidraw";
+import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, setCheckpointId, resetEditSession } from "./edit-context";
 import { fsLog, setLogFn } from "./logger";
@@ -45,22 +47,22 @@ const discordIcon = <svg focusable="false" role="img" viewBox="0 0 20 20" fill="
 
 
 export function ExcalidrawAppCore({ app }: { app: App }) {
-  const [toolInput, setToolInput] = useState<any>(null);
+  const [toolInput, setToolInput] = useState<{ elements?: string | unknown[] } | null>(null);
   const [inputIsFinal, setInputIsFinal] = useState(false);
   const [displayMode, setDisplayMode] = useState<"inline" | "fullscreen">("inline");
-  const [elements, setElements] = useState<any[]>([]);
-  const [userEdits, setUserEdits] = useState<any[] | null>(null);
+  const [elements, setElements] = useState<ExcalidrawElement[]>([]);
+  const [userEdits, setUserEdits] = useState<ExcalidrawElement[] | null>(null);
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
   const [editorReady, setEditorReady] = useState(false);
-  const [excalidrawApi, setExcalidrawApi] = useState<any>(null);
+  const [excalidrawApi, setExcalidrawApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [editorSettled, setEditorSettled] = useState(false);
   const appRef = useRef<App | null>(null);
   const svgViewportRef = useRef<ViewportRect | null>(null);
-  const elementsRef = useRef<any[]>([]);
+  const elementsRef = useRef<ExcalidrawElement[]>([]);
   const checkpointIdRef = useRef<string | null>(null);
 
   // Stable callbacks for DiagramView (avoid re-creating on every render)
-  const handleElements = useCallback((els: any[]) => {
+  const handleElements = useCallback((els: ExcalidrawElement[]) => {
     elementsRef.current = els;
     setElements(els);
   }, []);
@@ -69,13 +71,13 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     svgViewportRef.current = vp;
   }, []);
 
-  const handleLoadCheckpoint = useCallback(async (id: string): Promise<{ elements: any[] } | null> => {
+  const handleLoadCheckpoint = useCallback(async (id: string): Promise<{ elements: ExcalidrawElement[] } | null> => {
     if (!appRef.current) return null;
     try {
       const result = await appRef.current.callServerTool({ name: "read_checkpoint", arguments: { id } });
-      const text = (result.content[0] as any)?.text;
+      const text = (result.content[0] as { text?: string } | undefined)?.text;
       if (!text) return null;
-      return JSON.parse(text);
+      return JSON.parse(text) as { elements: ExcalidrawElement[] };
     } catch { return null; }
   }, []);
 
@@ -243,7 +245,14 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     };
 
     app.onteardown = async () => ({});
-    app.onerror = (err) => console.error("[Excalidraw] Error:", err);
+    app.onerror = (err) => {
+      const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      try {
+        app.sendLog({ level: "error", logger: "Excalidraw", data: message });
+      } catch {
+        fsLog(`app.onerror: ${message}`);
+      }
+    };
   }, [app]);
 
   return (
