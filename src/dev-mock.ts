@@ -83,7 +83,14 @@ export function createMockApp(): MockAppControls {
     },
 
     async updateModelContext(opts: any) {
-      console.log("[mock] updateModelContext", opts);
+      const items = opts?.content ?? [];
+      const summary = items.map((c: any) => {
+        if (c.type === "image") return `[image/${c.mimeType} ${(c.data?.length ?? 0)} chars]`;
+        if (c.type === "text") return c.text;
+        return JSON.stringify(c);
+      });
+      console.log("[mock] updateModelContext —", summary.length, "items:");
+      for (const s of summary) console.log("  •", s);
     },
 
     async sendMessage(params: any) {
