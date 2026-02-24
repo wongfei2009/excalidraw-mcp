@@ -7,18 +7,8 @@ import path from "node:path";
 import { deflateSync } from "node:zlib";
 import { z } from "zod/v4";
 import type { CheckpointStore } from "./checkpoint-store.js";
-
-type RawElement = {
-  type?: string;
-  id?: string;
-  ids?: string;
-  containerId?: string;
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  [key: string]: unknown;
-};
+import type { RawElement } from "./checkpoint-resolution.js";
+import { resolveElementsForCheckpoint } from "./checkpoint-resolution.js";
 
 /** Maximum allowed size for element/data input strings (5 MB). */
 const MAX_INPUT_BYTES = 5 * 1024 * 1024;
@@ -514,29 +504,17 @@ Apply these preferences when deciding element count, label verbosity, color pale
     { checkpointId: string; ratioHint: string } | { isError: true; errorMsg: string }
   > {
     const restoreEl = parsedElements.find((el) => el.type === "restoreCheckpoint");
-    let resolvedElements: RawElement[];
+    let baseElements: RawElement[] | undefined;
 
     if (restoreEl?.id) {
       const base = await store.load(restoreEl.id);
       if (!base) {
         return { isError: true, errorMsg: `Checkpoint "${restoreEl.id}" not found — it may have expired or never existed. Please recreate the diagram from scratch.` };
       }
-      const deleteIds = new Set<string>();
-      for (const el of parsedElements) {
-        if (el.type === "delete") {
-          for (const id of String(el.ids ?? el.id ?? "").split(",")) deleteIds.add(id.trim());
-        }
-      }
-      const baseFiltered = (base.elements as RawElement[]).filter((el) =>
-        !deleteIds.has(String(el.id ?? "")) && !deleteIds.has(String(el.containerId ?? ""))
-      );
-      const newEls = parsedElements.filter((el) =>
-        el.type !== "restoreCheckpoint" && el.type !== "delete"
-      );
-      resolvedElements = [...baseFiltered, ...newEls];
-    } else {
-      resolvedElements = parsedElements.filter((el) => el.type !== "delete");
+      baseElements = base.elements as RawElement[];
     }
+
+    const resolvedElements = resolveElementsForCheckpoint(parsedElements, baseElements);
 
     const cameras = parsedElements.filter((el) => el.type === "cameraUpdate");
     const badRatio = cameras.find((c) => {

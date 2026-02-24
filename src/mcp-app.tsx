@@ -10,6 +10,7 @@ import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, setCheckpointId, resetEditSession } from "./edit-context";
+import { createDebouncedCallback } from "./debounce";
 import { fsLog, setLogFn } from "./logger";
 import { normalizeToolInput } from "./element-utils";
 import type { ViewportRect } from "./element-utils";
@@ -24,6 +25,8 @@ import {
   ExpandIcon
 } from "./share-export";
 import "./global.css";
+
+const MODEL_CONTEXT_DEBOUNCE_MS = 1500;
 
 const excalidrawLogo = <svg
   focusable="false"
@@ -60,6 +63,15 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
   const svgViewportRef = useRef<ViewportRect | null>(null);
   const elementsRef = useRef<ExcalidrawElement[]>([]);
   const checkpointIdRef = useRef<string | null>(null);
+  const captureDebounceRef = useRef(
+    createDebouncedCallback(
+      (latestElements: ExcalidrawElement[], checkpointId: string | null) => {
+        if (!appRef.current || latestElements.length === 0) return;
+        captureContextPng(appRef.current, latestElements, checkpointId).catch(() => { });
+      },
+      MODEL_CONTEXT_DEBOUNCE_MS,
+    ),
+  );
 
   // Stable callbacks for DiagramView (avoid re-creating on every render)
   const handleElements = useCallback((els: ExcalidrawElement[]) => {
@@ -110,11 +122,18 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
     return () => document.removeEventListener("keydown", handler);
   }, [displayMode, toggleFullscreen]);
 
-  // Capture PNG and push to model context whenever elements change
+  // Capture PNG and push to model context (debounced to avoid expensive streaming churn)
   useEffect(() => {
-    if (!appRef.current || elements.length === 0) return;
-    captureContextPng(appRef.current, elements, checkpointIdRef.current).catch(() => { });
+    if (elements.length === 0) {
+      captureDebounceRef.current.cancel();
+      return;
+    }
+    captureDebounceRef.current.trigger(elements, checkpointIdRef.current);
   }, [elements]);
+
+  useEffect(() => {
+    return () => captureDebounceRef.current.cancel();
+  }, []);
 
   // Preload ALL Excalidraw fonts on first mount (inline mode) so they're
   // cached before fullscreen. Without this, Excalidraw's component init
