@@ -158,10 +158,26 @@ ALWAYS use one of these exact sizes. Non-4:3 viewports cause distortion.
 - Minimum fontSize: **14** for secondary annotations only (sparingly)
 - NEVER use fontSize below 14 — it becomes unreadable at display scale
 
-**Element sizing rules:**
-- Minimum shape size: 120×60 for labeled rectangles/ellipses
-- Leave 20-30px gaps between elements minimum
-- Prefer fewer, larger elements over many tiny ones
+**Sizing Rules (prevent truncation):**
+- **Shape width**: \`max(160, labelTextLength * 9)\` pixels. For multi-word labels, count all characters.
+- **Shape height**: 60px for single line, 80px for 2 lines, 100px for 3 lines.
+- **Background zones (rectangles wrapping other elements)**: Base the size on the children inside and add 50px padding on ALL sides.
+- **Element spacing**: Ensure at least 40px horizontal gap between sibling elements and 60px vertical gap between different tiers.
+
+**Layout Planning (prevent overlap):**
+Before creating elements, plan your coordinate grid:
+- Tier 1 (e.g. Client apps): y = 50 to 130
+- Tier 2 (e.g. Gateway/Edge): y = 200 to 280
+- Tier 3 (e.g. Services): y = 350 to 440 (spread wide: each service ~180px apart horizontally)
+- Tier 4 (e.g. Data stores): y = 510 to 590
+- Side panels: x < 0 (left) or x > mainDiagramRight + 80 (right)
+Do NOT place side panels at the same x-range as the main diagram — they will overlap.
+
+**Arrow Routing (prevent crossing):**
+- NEVER allow arrows to cross through unrelated text or shapes.
+- If an obstacle exists, use elbowed/curved arrows and explicitly set waypoints (x, y points) to route the line around the obstacle.
+- Limit arrow text labels to 1-2 words to prevent text clipping.
+
 
 ALWAYS start with a \`cameraUpdate\` as the FIRST element. For example:
 \`{ "type": "cameraUpdate", "width": 800, "height": 600, "x": 0, "y": 0 }\`
